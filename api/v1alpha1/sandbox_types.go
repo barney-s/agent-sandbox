@@ -17,28 +17,32 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// Important: Run "make" to regenerate code after modifying this file
 
 // SandboxSpec defines the desired state of Sandbox
 type SandboxSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// foo is an example field of Sandbox. Edit sandbox_types.go to remove/update
-	// +optional
-	Foo *string `json:"foo,omitempty"`
+	// State: RUNNING(default)|SUSPENDED
+	// +kubebuilder:default="RUNNING"
+	// +kubebuilder:validation:Enum=RUNNING;SUSPENDED
+	// +kubebuilder:validation:Required
+	State string `json:"state" protobuf:"bytes,1,opt,name=state"`
+
+	// template is the object that describes the pod spec that will be used to create
+	// an agent sandbox. Each pod will be named with the format sandbox.metadata.name
+	// +kubebuilder:validation:Required
+	Template corev1.PodTemplateSpec `json:"template" protobuf:"bytes,3,opt,name=template"`
 }
 
 // SandboxStatus defines the observed state of Sandbox.
 type SandboxStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 }
 
 // +kubebuilder:object:root=true
