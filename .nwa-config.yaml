@@ -1,0 +1,7 @@
+nwa:
+  holder: The Kubernetes Authors
+  license: apache
+  year: "2025"
+  path:
+    - api/**/*.go
+  mute: true
