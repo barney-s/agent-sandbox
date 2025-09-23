@@ -1,0 +1,142 @@
+
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: devcontainer
+spec:
+  schema:
+    apiVersion: v1alpha1
+    group: custom.agents.x-k8s.io
+    kind: DevContainer
+    spec:
+      # Spec fields that users can provide.
+      source:
+        giturl: string | default="https://github.com/barney-s/agent-sandbox.git#refs/heads/devcontainer"
+      devcontainerDir: string | default="examples/envbuilder-sandbox"
+      networkPolicy:
+        enabled: boolean | default=false
+        ingress:
+          podLabels: "map[string]string"
+          namespaceLabels: "map[string]string"
+        egress: object
+      ingress:
+        enabled: boolean | default=false
+    status:
+      # Fields the controller will inject into instances status.
+      fqdn: ${service.metadata.name}.${service.metadata.namespace}.svc.cluster.local
+      sandboxConditions: ${sandbox.status.conditions}
+  resources:
+    - id: pv
+      template:
+        apiVersion: v1
+        kind: PersistentVolume
+        metadata:
+          name: devc-${schema.metadata.name}-pv
+        spec:
+          capacity:
+            storage: 10Gi
+          accessModes:
+            - ReadWriteOnce
+          persistentVolumeReclaimPolicy: Retain
+          storageClassName: manual
+          hostPath:
+            path: "/mnt/data" # Path on the node where the PersistentVolume's data will be stored, this is an example
+    - id: pvc
+      template:
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: devc-${schema.metadata.name}-pvc
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+          storageClassName: manual
+    - id: sandbox
+      readyWhen: # CEL expressions to determine when a resource is ready
+      - ${sandbox.status.conditions.exists(x, x.type == 'Ready' && x.status == "True")}
+      template:
+        apiVersion: agents.x-k8s.io/v1alpha1
+        kind: Sandbox
+        metadata:
+          name: devc-${schema.metadata.name} # Use the name provided by user
+        spec:
+          podTemplate:
+            metadata:
+              labels:
+                sandbox: devc-${schema.metadata.name}
+            spec:
+              containers:
+                - name: devcontainer-main
+                  image: ghcr.io/coder/envbuilder
+                  env:
+                    # URL to the repository where the .devcontainer folder we want to load is located
+                    - name: ENVBUILDER_GIT_URL
+                      value: ${schema.spec.source.giturl}
+                    - name: ENVBUILDER_DEVCONTAINER_DIR
+                      value: ${schema.spec.devcontainerDir}
+                    - name: ENVBUILDER_GIT_CLONE_SINGLE_BRANCH
+                      value: "true"
+                    - name: ENVBUILDER_INIT_SCRIPT
+                      value: "/usr/local/bin/code-server-entrypoint"
+                  volumeMounts:
+                    - mountPath: /workspaces
+                      name: workspaces-volume
+                  ports:
+                    - containerPort: 13337
+              volumes:
+                - name: workspaces-volume
+                  persistentVolumeClaim:
+                    claimName: ${pvc.metadata.name}
+    - id: service
+      template:
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: devc-${schema.metadata.name}-lb
+        spec:
+          selector:
+            sandbox: devc-${schema.metadata.name}
+          ports:
+            - protocol: TCP
+              port: 13337
+              targetPort: 13337
+    - id: nwpolicy
+      includeWhen:
+        - ${schema.spec.networkPolicy.enabled}
+      template:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: allow-frontend-to-backend
+          namespace: default
+        spec:
+          podSelector:
+            matchLabels:
+              sandbox: devc-${schema.metadata.name}
+          policyTypes:
+            - Ingress
+            - Egress
+          ingress:
+          - from:
+            - podSelector:
+                matchLabels: ${schema.spec.networkPolicy.ingress.podLabels}
+            - namespaceSelector:
+                matchLabels: ${schema.spec.networkPolicy.ingress.namespaceLabels}
+          egress: ${schema.spec.networkPolicy.egress}
+    - id: ingress
+      includeWhen:
+        - ${schema.spec.ingress.enabled} # Only include if the user wants to create an Ingress
+      template:
+        apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          name: devc-${schema.metadata.name}
+        spec:
+          defaultBackend:
+            service:
+              name: ${service.metadata.name}
+              port:
+                number: 13337

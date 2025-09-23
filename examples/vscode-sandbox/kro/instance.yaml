@@ -1,0 +1,8 @@
+apiVersion: custom.agents.x-k8s.io/v1alpha1
+kind: DevContainer
+metadata:
+  name: demo
+spec:
+  source:
+    giturl: https://github.com/kubernetes-sigs/agent-sandbox.git
+  devcontainerDir: examples/envbuilder-sandbox

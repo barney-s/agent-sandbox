@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: workspaces-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: "/mnt/data" # Path on the node where the PersistentVolume's data will be stored, this is an example
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspaces-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: manual
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sandbox-example
+spec:
+  containers:
+    - name: devcontainer-main
+      image: ghcr.io/coder/envbuilder
+      env:
+        # URL to the repository where the .devcontainer folder we want to load is located
+        - name: ENVBUILDER_GIT_URL
+          value: "https://github.com/kubernetes-sigs/agent-sandbox.git"
+        - name: ENVBUILDER_DEVCONTAINER_DIR
+          value: "examples/envbuilder-sandbox"
+        - name: ENVBUILDER_GIT_CLONE_SINGLE_BRANCH
+          value: "true"
+        # Sleep forever
+        - name: ENVBUILDER_INIT_SCRIPT
+          value: "/usr/local/bin/code-server-entrypoint"
+      volumeMounts:
+        - mountPath: /workspaces
+          name: workspaces-volume
+  volumes:
+    - name: workspaces-volume
+      persistentVolumeClaim:
+        claimName: workspaces-pvc
