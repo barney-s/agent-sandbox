@@ -1,0 +1,12 @@
+apiVersion: custom.agents.x-k8s.io/v1alpha1
+kind: GeminiVSCodeSandbox
+metadata:
+  name: demo
+spec:
+  prompt: "You are an expert kubernetes developer who is helping with code reviews. Please look at the most recent commit and provide a review feedback. Would you approve it ?"
+  source:
+    giturl: https://github.com/barney-s/agent-sandbox.git#refs/heads/demo
+  devcontainerDir: examples/vscode-sandbox
+  entrypoint: examples/vscode-sandbox/entrypoint.sh
+  gateway:
+    enabled: true

@@ -22,6 +22,7 @@ def main():
     parser = argparse.ArgumentParser(description="Create a kind cluster.")
     parser.add_argument("name", help="The name of the cluster.")
     parser.add_argument("--recreate", action="store_true", help="Delete the cluster if it already exists.")
+    parser.add_argument("--config", type=str, help="Path to a Kind cluster configuration file (YAML).")
     parser.add_argument("--kubeconfig", help="Path to export the kubeconfig to.")
     args = parser.parse_args()
 
@@ -38,7 +39,17 @@ def main():
 
     if not cluster_exists:
         print(f"Creating cluster '{args.name}'.")
-        subprocess.run(["kind", "create", "cluster", "--name", args.name], check=True)
+        command = ["kind", "create", "cluster", "--name", args.name]
+        if args.config:
+            command.extend(["--config", args.config])
+        try:
+            subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print(f"Kind cluster '{args.name}' created successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error creating Kind cluster '{args.name}':")
+            print(f"STDOUT: {e.stdout.decode()}")
+            print(f"STDERR: {e.stderr.decode()}")
+            exit(1)
 
     if args.kubeconfig:
         kubeconfig_dir = os.path.dirname(args.kubeconfig)
