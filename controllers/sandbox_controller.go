@@ -430,6 +430,8 @@ func (r *SandboxReconciler) handleSandboxExpiry(ctx context.Context, sandbox *sa
 
 	sandbox.Status.Replicas = 0
 	sandbox.Status.LabelSelector = ""
+	sandbox.Status.Service = ""
+	sandbox.Status.ServiceFQDN = ""
 
 	return allErrors
 }
