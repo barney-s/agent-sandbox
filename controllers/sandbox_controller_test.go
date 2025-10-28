@@ -649,3 +649,76 @@ func TestSandboxExpiry(t *testing.T) {
 		})
 	}
 }
+
+func TestReconcilePhaseTransitions(t *testing.T) {
+	sandboxName := "sandbox-name"
+	sandboxNs := "sandbox-ns"
+	sb := &sandboxv1alpha1.Sandbox{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       sandboxName,
+			Namespace:  sandboxNs,
+			Generation: 1,
+		},
+		Spec: sandboxv1alpha1.SandboxSpec{
+			PodTemplate: sandboxv1alpha1.PodTemplate{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: "test-container",
+						},
+					},
+				},
+			},
+		},
+	}
+	r := SandboxReconciler{
+		Client: newFakeClient(sb),
+		Scheme: Scheme,
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      sandboxName,
+			Namespace: sandboxNs,
+		},
+	}
+
+	// 1. Initial reconcile, phase should be Pending
+	_, err := r.Reconcile(t.Context(), req)
+	require.NoError(t, err)
+	liveSandbox := &sandboxv1alpha1.Sandbox{}
+	require.NoError(t, r.Get(t.Context(), req.NamespacedName, liveSandbox))
+	require.Equal(t, sandboxv1alpha1.SandboxPhasePending, liveSandbox.Status.Phase)
+
+	// 2. Simulate pod running, phase should be Running
+	pod := &corev1.Pod{}
+	require.NoError(t, r.Get(t.Context(), req.NamespacedName, pod))
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.Conditions = []corev1.PodCondition{
+		{
+			Type:   corev1.PodReady,
+			Status: corev1.ConditionTrue,
+		},
+	}
+	require.NoError(t, r.Client.Status().Update(t.Context(), pod))
+	_, err = r.Reconcile(t.Context(), req)
+	require.NoError(t, err)
+	require.NoError(t, r.Get(t.Context(), req.NamespacedName, liveSandbox))
+	require.Equal(t, sandboxv1alpha1.SandboxPhaseRunning, liveSandbox.Status.Phase)
+
+	// 3. Set replicas to 0, phase should be Paused
+	liveSandbox.Spec.Replicas = ptr.To(int32(0))
+	require.NoError(t, r.Update(t.Context(), liveSandbox))
+	_, err = r.Reconcile(t.Context(), req)
+	require.NoError(t, err)
+	require.NoError(t, r.Get(t.Context(), req.NamespacedName, liveSandbox))
+	require.Equal(t, sandboxv1alpha1.SandboxPhasePaused, liveSandbox.Status.Phase)
+
+	// 4. Set shutdown time to the past, phase should be Failed
+	liveSandbox.Spec.ShutdownTime = ptr.To(metav1.NewTime(time.Now().Add(-10 * time.Second)))
+	require.NoError(t, r.Update(t.Context(), liveSandbox))
+	_, err = r.Reconcile(t.Context(), req)
+	require.NoError(t, err)
+	require.NoError(t, r.Get(t.Context(), req.NamespacedName, liveSandbox))
+	require.Equal(t, sandboxv1alpha1.SandboxPhaseFailed, liveSandbox.Status.Phase)
+}

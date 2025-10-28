@@ -119,8 +119,30 @@ type SandboxSpec struct {
 	Replicas *int32 `json:"replicas,omitempty"`
 }
 
+
+// SandboxPhase is a label for the condition of a sandbox at the current time.
+// +kubebuilder:validation:Enum=Pending;Running;Paused;Terminating;Failed
+type SandboxPhase string
+
+const (
+	// SandboxPhasePending means the sandbox is waiting to be processed.
+	SandboxPhasePending SandboxPhase = "Pending"
+	// SandboxPhaseRunning means the sandbox is running and ready to be used.
+	SandboxPhaseRunning SandboxPhase = "Running"
+	// SandboxPhasePaused means the sandbox is paused and not consuming resources.
+	SandboxPhasePaused SandboxPhase = "Paused"
+	// SandboxPhaseTerminating means the sandbox is terminating.
+	SandboxPhaseTerminating SandboxPhase = "Terminating"
+	// SandboxPhaseFailed means the sandbox has failed.
+	SandboxPhaseFailed SandboxPhase = "Failed"
+)
+
 // SandboxStatus defines the observed state of Sandbox.
 type SandboxStatus struct {
+	// Phase is the current phase of the sandbox.
+	// +optional
+	Phase SandboxPhase `json:"phase,omitempty"`
+
 	// FQDN that is valid for default cluster settings
 	// Limitation: Hardcoded to the domain .cluster.local
 	// e.g. sandbox-example.default.svc.cluster.local
