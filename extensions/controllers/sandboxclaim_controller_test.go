@@ -42,7 +42,15 @@ func TestSandboxClaimReconcile(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: extensionsv1alpha1.SandboxTemplateSpec{
-			PodTemplate: corev1.PodTemplateSpec{
+			PodTemplate: sandboxv1alpha1.PodTemplate{
+				ObjectMeta: sandboxv1alpha1.PodMetadata{
+					Labels: map[string]string{
+						"test-label": "test-label-value",
+					},
+					Annotations: map[string]string{
+						"test-annotation": "test-annotation-value",
+					},
+				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
@@ -73,9 +81,7 @@ func TestSandboxClaimReconcile(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: v1alpha1.SandboxSpec{
-			PodTemplate: v1alpha1.PodTemplate{
-				Spec: template.Spec.PodTemplate.Spec,
-			},
+			PodTemplate: template.Spec.PodTemplate,
 		},
 	}
 
@@ -94,9 +100,7 @@ func TestSandboxClaimReconcile(t *testing.T) {
 			},
 		},
 		Spec: v1alpha1.SandboxSpec{
-			PodTemplate: v1alpha1.PodTemplate{
-				Spec: template.Spec.PodTemplate.Spec,
-			},
+			PodTemplate: template.Spec.PodTemplate,
 		},
 	}
 
@@ -217,7 +221,7 @@ func TestSandboxClaimReconcile(t *testing.T) {
 			}
 
 			if tc.expectSandbox {
-				if diff := cmp.Diff(sandbox.Spec.PodTemplate.Spec, template.Spec.PodTemplate.Spec); diff != "" {
+				if diff := cmp.Diff(sandbox.Spec.PodTemplate, template.Spec.PodTemplate); diff != "" {
 					t.Errorf("unexpected sandbox spec:\n%s", diff)
 				}
 			}
