@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -648,4 +649,80 @@ func TestSandboxExpiry(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSandboxCreationLatencyMetric(t *testing.T) {
+	sandboxName := "sandbox-name"
+	sandboxNs := "sandbox-ns"
+	sb := &sandboxv1alpha1.Sandbox{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              sandboxName,
+			Namespace:         sandboxNs,
+			Generation:        1,
+			CreationTimestamp: metav1.NewTime(time.Now()),
+		},
+		Spec: sandboxv1alpha1.SandboxSpec{
+			PodTemplate: sandboxv1alpha1.PodTemplate{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: "test-container",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	r := SandboxReconciler{
+		Client: newFakeClient(sb),
+		Scheme: Scheme,
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      sandboxName,
+			Namespace: sandboxNs,
+		},
+	}
+
+	// First reconcile, sandbox is not ready
+	_, err := r.Reconcile(t.Context(), req)
+	require.NoError(t, err)
+
+	// check that the metric is 0
+	metric := &io_prometheus_client.Metric{}
+	sandboxCreationLatency.Write(metric)
+	require.Equal(t, uint64(0), metric.GetHistogram().GetSampleCount())
+
+	// Update pod and service to make sandbox ready
+	pod := &corev1.Pod{}
+	require.NoError(t, r.Get(t.Context(), types.NamespacedName{Name: sandboxName, Namespace: sandboxNs}, pod))
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.Conditions = []corev1.PodCondition{
+		{
+			Type:   corev1.PodReady,
+			Status: corev1.ConditionTrue,
+		},
+	}
+	require.NoError(t, r.Status().Update(t.Context(), pod))
+
+	// Second reconcile, sandbox becomes ready
+	_, err = r.Reconcile(t.Context(), req)
+	require.NoError(t, err)
+
+	// check that the metric is observed
+	metric = &io_prometheus_client.Metric{}
+	sandboxCreationLatency.Write(metric)
+	require.Equal(t, uint64(1), metric.GetHistogram().GetSampleCount())
+	require.Greater(t, metric.GetHistogram().GetSampleSum(), float64(0))
+
+	// Third reconcile, sandbox is still ready
+	_, err = r.Reconcile(t.Context(), req)
+	require.NoError(t, err)
+
+	// check that the metric is not observed again
+	metric = &io_prometheus_client.Metric{}
+	sandboxCreationLatency.Write(metric)
+	require.Equal(t, uint64(1), metric.GetHistogram().GetSampleCount())
 }

@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -35,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	sandboxv1alpha1 "sigs.k8s.io/agent-sandbox/api/v1alpha1"
@@ -48,11 +50,19 @@ const (
 var (
 	// Scheme for use by sandbox controllers. Registers required types for client.
 	Scheme = runtime.NewScheme()
+
+	sandboxCreationLatency = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name: "sandbox_creation_latency_seconds",
+			Help: "Time taken from sandbox creation to sandbox being ready",
+		},
+	)
 )
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(Scheme))
 	utilruntime.Must(sandboxv1alpha1.AddToScheme(Scheme))
+	metrics.Registry.MustRegister(sandboxCreationLatency)
 }
 
 // SandboxReconciler reconciles a Sandbox object
@@ -218,6 +228,17 @@ func (r *SandboxReconciler) updateStatus(ctx context.Context, oldStatus *sandbox
 
 	if reflect.DeepEqual(oldStatus, &sandbox.Status) {
 		return nil
+	}
+
+	// check if sandbox is ready
+	isReady := meta.IsStatusConditionTrue(sandbox.Status.Conditions, string(sandboxv1alpha1.SandboxConditionReady))
+	// check if old status was not ready
+	wasReady := meta.IsStatusConditionTrue(oldStatus.Conditions, string(sandboxv1alpha1.SandboxConditionReady))
+
+	if isReady && !wasReady {
+		latency := time.Since(sandbox.CreationTimestamp.Time)
+		sandboxCreationLatency.Observe(latency.Seconds())
+		log.Info("sandbox is ready, creation latency", "latency", latency)
 	}
 
 	if err := r.Status().Update(ctx, sandbox); err != nil {
