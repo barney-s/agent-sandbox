@@ -9,13 +9,31 @@ fix-go-generate:
 build:
 	go build -o bin/manager cmd/agent-sandbox-controller/main.go
 
+.PHONY: build-with-extensions
+build-with-extensions:
+	go build -o bin/manager --tags=extensions cmd/agent-sandbox-controller/main.go
+
 KIND_CLUSTER=agent-sandbox
 
 .PHONY: deploy-kind
 deploy-kind:
+	apt-get update && apt-get install -y docker.io
+	sudo dockerd --iptables=false &
+	sleep 5
+	go install sigs.k8s.io/kind@v0.20.0
 	./dev/tools/create-kind-cluster --recreate ${KIND_CLUSTER} --kubeconfig bin/KUBECONFIG
 	./dev/tools/push-images --image-prefix=kind.local/ --kind-cluster-name=${KIND_CLUSTER}
 	./dev/tools/deploy-to-kube --image-prefix=kind.local/
+
+.PHONY: deploy-kind-with-extensions
+deploy-kind-with-extensions: build-with-extensions
+	apt-get update && apt-get install -y docker.io
+	sudo dockerd --iptables=false &
+	sleep 5
+	go install sigs.k8s.io/kind@v0.20.0
+	./dev/tools/create-kind-cluster --recreate ${KIND_CLUSTER} --kubeconfig bin/KUBECONFIG
+	./dev/tools/push-images --image-prefix=kind.local/ --kind-cluster-name=${KIND_CLUSTER}
+	./dev/tools/deploy-to-kube --image-prefix=kind.local/ --extensions
 
 .PHONY: delete-kind
 delete-kind:
