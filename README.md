@@ -31,7 +31,7 @@ We aim for the Sandbox to be vendor-neutral, supporting various runtimes. Key ch
 
 This is a community-driven effort, and we welcome collaboration!
 
-Learn how to engage with the Kubernetes community on the [community page](http://kubernetes.io/community/).
+Learn how to engage with the Kubernetes community on the [community page](http.kubernetes.io/community/).
 
 You can reach the maintainers of this project at:
 
@@ -39,6 +39,12 @@ You can reach the maintainers of this project at:
 - [Mailing List](https://groups.google.com/a/kubernetes.io/g/sig-apps)
 
 Please feel free to open issues, suggest features, and contribute code!
+
+### Deploying to a kind cluster with extensions
+
+```bash
+make deploy-kind-with-extensions
+```
 
 ### Code of conduct
 

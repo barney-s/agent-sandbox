@@ -17,6 +17,13 @@ deploy-kind:
 	./dev/tools/push-images --image-prefix=kind.local/ --kind-cluster-name=${KIND_CLUSTER}
 	./dev/tools/deploy-to-kube --image-prefix=kind.local/
 
+.PHONY: deploy-kind-with-extensions
+deploy-kind-with-extensions:
+	./dev/tools/create-kind-cluster --recreate ${KIND_CLUSTER} --kubeconfig bin/KUBECONFIG
+	./dev/tools/push-images --image-prefix=kind.local/ --kind-cluster-name=${KIND_CLUSTER}
+	./dev/tools/deploy-to-kube --image-prefix=kind.local/ --extensions
+
+
 .PHONY: delete-kind
 delete-kind:
 	kind delete cluster --name ${KIND_CLUSTER}
