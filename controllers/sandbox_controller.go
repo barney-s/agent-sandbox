@@ -35,9 +35,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	"github.com/prometheus/client_golang/prometheus"
 	sandboxv1alpha1 "sigs.k8s.io/agent-sandbox/api/v1alpha1"
+)
+
+var (
+	sandboxCreationLatency = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name: "sandbox_creation_latency",
+			Help: "Time taken from sandbox creation to sandbox ready",
+			// Let's use buckets from 1s to 16s
+			Buckets: prometheus.LinearBuckets(1, 1, 16),
+		},
+	)
 )
 
 const (
@@ -53,6 +66,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(Scheme))
 	utilruntime.Must(sandboxv1alpha1.AddToScheme(Scheme))
+	metrics.Registry.MustRegister(sandboxCreationLatency)
 }
 
 // SandboxReconciler reconciles a Sandbox object
@@ -108,7 +122,7 @@ func (r *SandboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		log.Info("Sandbox has expired, deleting pod and service")
 		err = r.handleSandboxExpiry(ctx, sandbox)
 	} else {
-		err = r.reconcileChildResources(ctx, sandbox)
+		err = r.reconcileChildResources(ctx, oldStatus, sandbox)
 	}
 
 	// Update status
@@ -121,7 +135,7 @@ func (r *SandboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return ctrl.Result{RequeueAfter: requeueAfter}, err
 }
 
-func (r *SandboxReconciler) reconcileChildResources(ctx context.Context, sandbox *sandboxv1alpha1.Sandbox) error {
+func (r *SandboxReconciler) reconcileChildResources(ctx context.Context, oldStatus *sandboxv1alpha1.SandboxStatus, sandbox *sandboxv1alpha1.Sandbox) error {
 	// Create a hash from the sandbox.Name and use it as label value
 	nameHash := NameHash(sandbox.Name)
 
@@ -149,6 +163,13 @@ func (r *SandboxReconciler) reconcileChildResources(ctx context.Context, sandbox
 	// compute and set overall Ready condition
 	readyCondition := r.computeReadyCondition(sandbox, allErrors, svc, pod)
 	meta.SetStatusCondition(&sandbox.Status.Conditions, readyCondition)
+
+	// check if we need to record the creation latency
+	oldReadyCondition := meta.FindStatusCondition(oldStatus.Conditions, string(sandboxv1alpha1.SandboxConditionReady))
+	if readyCondition.Status == metav1.ConditionTrue && (oldReadyCondition == nil || oldReadyCondition.Status == metav1.ConditionFalse) {
+		latency := time.Since(sandbox.CreationTimestamp.Time)
+		sandboxCreationLatency.Observe(latency.Seconds())
+	}
 
 	return allErrors
 }

@@ -33,6 +33,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func newFakeClient(initialObjs ...runtime.Object) client.WithWatch {
@@ -211,6 +213,20 @@ func TestReconcile(t *testing.T) {
 		wantStatus  sandboxv1alpha1.SandboxStatus
 		wantObjs    []client.Object
 	}{
+		{
+			name: "metric is recorded when sandbox becomes ready",
+			sandboxSpec: sandboxv1alpha1.SandboxSpec{
+				PodTemplate: sandboxv1alpha1.PodTemplate{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "test-container",
+							},
+						},
+					},
+				},
+			},
+		},
 		{
 			name: "minimal sandbox spec with Pod and Service",
 			// Input sandbox spec
@@ -427,21 +443,48 @@ func TestReconcile(t *testing.T) {
 				},
 			})
 			require.NoError(t, err)
-			// Validate Sandbox status
-			liveSandbox := &sandboxv1alpha1.Sandbox{}
-			require.NoError(t, r.Get(t.Context(), types.NamespacedName{Name: sandboxName, Namespace: sandboxNs}, liveSandbox))
-			opts := []cmp.Option{
-				cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime"),
-			}
-			if diff := cmp.Diff(tc.wantStatus, liveSandbox.Status, opts...); diff != "" {
-				t.Fatalf("unexpected sandbox status (-want,+got):\n%s", diff)
-			}
-			// Validate the other objects from the "cluster" (fake client)
-			for _, obj := range tc.wantObjs {
-				liveObj := obj.DeepCopyObject().(client.Object)
-				err = r.Get(t.Context(), types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, liveObj)
+
+			if tc.name == "metric is recorded when sandbox becomes ready" {
+				// update pod to be ready
+				pod := &corev1.Pod{}
+				require.NoError(t, r.Get(t.Context(), types.NamespacedName{Name: sandboxName, Namespace: sandboxNs}, pod))
+				pod.Status.Phase = corev1.PodRunning
+				pod.Status.Conditions = []corev1.PodCondition{
+					{
+						Type:   corev1.PodReady,
+						Status: corev1.ConditionTrue,
+					},
+				}
+				require.NoError(t, r.Update(t.Context(), pod))
+
+				// reconcile again
+				_, err = r.Reconcile(t.Context(), ctrl.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      sandboxName,
+						Namespace: sandboxNs,
+					},
+				})
 				require.NoError(t, err)
-				require.Equal(t, obj, liveObj)
+
+				// check metric
+				require.Equal(t, 1, testutil.CollectAndCount(sandboxCreationLatency))
+			} else {
+				// Validate Sandbox status
+				liveSandbox := &sandboxv1alpha1.Sandbox{}
+				require.NoError(t, r.Get(t.Context(), types.NamespacedName{Name: sandboxName, Namespace: sandboxNs}, liveSandbox))
+				opts := []cmp.Option{
+					cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime"),
+				}
+				if diff := cmp.Diff(tc.wantStatus, liveSandbox.Status, opts...); diff != "" {
+					t.Fatalf("unexpected sandbox status (-want,+got):\n%s", diff)
+				}
+				// Validate the other objects from the "cluster" (fake client)
+				for _, obj := range tc.wantObjs {
+					liveObj := obj.DeepCopyObject().(client.Object)
+					err = r.Get(t.Context(), types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, liveObj)
+					require.NoError(t, err)
+					require.Equal(t, obj, liveObj)
+				}
 			}
 		})
 	}
