@@ -231,6 +231,7 @@ func TestReconcile(t *testing.T) {
 				ServiceFQDN:   "sandbox-name.sandbox-ns.svc.cluster.local",
 				Replicas:      1,
 				LabelSelector: "agents.x-k8s.io/sandbox-name-hash=ab179450", // Pre-computed hash of "sandbox-name"
+				Phase:         sandboxv1alpha1.SandboxPhasePending,
 				Conditions: []metav1.Condition{
 					{
 						Type:               "Ready",
@@ -324,6 +325,7 @@ func TestReconcile(t *testing.T) {
 				ServiceFQDN:   "sandbox-name.sandbox-ns.svc.cluster.local",
 				Replicas:      1,
 				LabelSelector: "agents.x-k8s.io/sandbox-name-hash=ab179450", // Pre-computed hash of "sandbox-name"
+				Phase:         sandboxv1alpha1.SandboxPhasePending,
 				Conditions: []metav1.Condition{
 					{
 						Type:               "Ready",
@@ -406,8 +408,78 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "sandbox phase transitions",
+			// Input sandbox spec
+			sandboxSpec: sandboxv1alpha1.SandboxSpec{
+				PodTemplate: sandboxv1alpha1.PodTemplate{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "test-container",
+							},
+						},
+					},
+				},
+			},
+			// Verify Sandbox status
+			wantStatus: sandboxv1alpha1.SandboxStatus{
+				Service:       sandboxName,
+				ServiceFQDN:   "sandbox-name.sandbox-ns.svc.cluster.local",
+				Replicas:      1,
+				LabelSelector: "agents.x-k8s.io/sandbox-name-hash=ab179450", // Pre-computed hash of "sandbox-name"
+				Phase:         sandboxv1alpha1.SandboxPhasePending,
+				Conditions: []metav1.Condition{
+					{
+						Type:               "Ready",
+						Status:             "False",
+						ObservedGeneration: 1,
+						Reason:             "DependenciesNotReady",
+						Message:            "Pod exists with phase: ; Service Exists",
+					},
+				},
+			},
+			wantObjs: []client.Object{
+				// Verify Pod
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            sandboxName,
+						Namespace:       sandboxNs,
+						ResourceVersion: "1",
+						Labels: map[string]string{
+							"agents.x-k8s.io/sandbox-name-hash": "ab179450",
+						},
+						OwnerReferences: []metav1.OwnerReference{sandboxControllerRef(sandboxName)},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "test-container",
+							},
+						},
+					},
+				},
+				// Verify Service
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            sandboxName,
+						Namespace:       sandboxNs,
+						ResourceVersion: "1",
+						Labels: map[string]string{
+							"agents.x-k8s.io/sandbox-name-hash": "ab179450",
+						},
+						OwnerReferences: []metav1.OwnerReference{sandboxControllerRef(sandboxName)},
+					},
+					Spec: corev1.ServiceSpec{
+						Selector: map[string]string{
+							"agents.x-k8s.io/sandbox-name-hash": "ab179450",
+						},
+						ClusterIP: "None",
+					},
+				},
+			},
+		},
 	}
-
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			sb := &sandboxv1alpha1.Sandbox{}

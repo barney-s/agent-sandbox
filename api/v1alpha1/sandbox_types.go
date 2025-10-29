@@ -138,7 +138,27 @@ type SandboxStatus struct {
 	// LabelSelector is the label selector for pods.
 	// +optional
 	LabelSelector string `json:"selector,omitempty"`
+
+	// Phase is the current phase of the sandbox.
+	// +optional
+	Phase SandboxPhase `json:"phase,omitempty"`
 }
+
+// SandboxPhase is a label for the condition of a sandbox at the current time.
+type SandboxPhase string
+
+const (
+	// SandboxPhasePending means the sandbox is waiting to be processed.
+	SandboxPhasePending SandboxPhase = "Pending"
+	// SandboxPhaseRunning means the sandbox is running and ready.
+	SandboxPhaseRunning SandboxPhase = "Running"
+	// SandboxPhasePaused means the sandbox is paused and not consuming resources.
+	SandboxPhasePaused SandboxPhase = "Paused"
+	// SandboxPhaseTerminating means the sandbox is terminating.
+	SandboxPhaseTerminating SandboxPhase = "Terminating"
+	// SandboxPhaseFailed means the sandbox has failed.
+	SandboxPhaseFailed SandboxPhase = "Failed"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
