@@ -42,7 +42,15 @@ func TestSandboxClaimReconcile(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: extensionsv1alpha1.SandboxTemplateSpec{
-			PodTemplate: corev1.PodTemplateSpec{
+			PodTemplate: extensionsv1alpha1.PodTemplate{
+				ObjectMeta: extensionsv1alpha1.PodMetadata{
+					Labels: map[string]string{
+						"test-label": "test-label-value",
+					},
+					Annotations: map[string]string{
+						"test-annotation": "test-annotation-value",
+					},
+				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
@@ -74,6 +82,10 @@ func TestSandboxClaimReconcile(t *testing.T) {
 		},
 		Spec: v1alpha1.SandboxSpec{
 			PodTemplate: v1alpha1.PodTemplate{
+				ObjectMeta: v1alpha1.PodMetadata{
+					Labels:      template.Spec.PodTemplate.ObjectMeta.Labels,
+					Annotations: template.Spec.PodTemplate.ObjectMeta.Annotations,
+				},
 				Spec: template.Spec.PodTemplate.Spec,
 			},
 		},
@@ -95,6 +107,10 @@ func TestSandboxClaimReconcile(t *testing.T) {
 		},
 		Spec: v1alpha1.SandboxSpec{
 			PodTemplate: v1alpha1.PodTemplate{
+				ObjectMeta: v1alpha1.PodMetadata{
+					Labels:      template.Spec.PodTemplate.ObjectMeta.Labels,
+					Annotations: template.Spec.PodTemplate.ObjectMeta.Annotations,
+				},
 				Spec: template.Spec.PodTemplate.Spec,
 			},
 		},
@@ -183,6 +199,17 @@ func TestSandboxClaimReconcile(t *testing.T) {
 				Message: "Sandbox is ready",
 			},
 		},
+		{
+			name:            "sandbox metadata is copied from template",
+			existingObjects: []client.Object{template, claim},
+			expectSandbox:   true,
+			expectedCondition: metav1.Condition{
+				Type:    string(sandboxv1alpha1.SandboxConditionReady),
+				Status:  metav1.ConditionFalse,
+				Reason:  "SandboxNotReady",
+				Message: "Sandbox is not ready",
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -219,6 +246,12 @@ func TestSandboxClaimReconcile(t *testing.T) {
 			if tc.expectSandbox {
 				if diff := cmp.Diff(sandbox.Spec.PodTemplate.Spec, template.Spec.PodTemplate.Spec); diff != "" {
 					t.Errorf("unexpected sandbox spec:\n%s", diff)
+				}
+				if diff := cmp.Diff(sandbox.Spec.PodTemplate.ObjectMeta.Labels, template.Spec.PodTemplate.ObjectMeta.Labels); diff != "" {
+					t.Errorf("unexpected sandbox labels:\n%s", diff)
+				}
+				if diff := cmp.Diff(sandbox.Spec.PodTemplate.ObjectMeta.Annotations, template.Spec.PodTemplate.ObjectMeta.Annotations); diff != "" {
+					t.Errorf("unexpected sandbox annotations:\n%s", diff)
 				}
 			}
 

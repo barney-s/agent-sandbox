@@ -180,8 +180,8 @@ func (r *SandboxClaimReconciler) createSandbox(ctx context.Context, claim *exten
 		},
 	}
 	sandbox.Spec.PodTemplate.Spec = template.Spec.PodTemplate.Spec
-	sandbox.Spec.PodTemplate.ObjectMeta.Labels = template.Spec.PodTemplate.Labels
-	sandbox.Spec.PodTemplate.ObjectMeta.Annotations = template.Spec.PodTemplate.Annotations
+	sandbox.Spec.PodTemplate.ObjectMeta.Labels = template.Spec.PodTemplate.ObjectMeta.Labels
+	sandbox.Spec.PodTemplate.ObjectMeta.Annotations = template.Spec.PodTemplate.ObjectMeta.Annotations
 	if err := controllerutil.SetControllerReference(claim, sandbox, r.Scheme); err != nil {
 		err = fmt.Errorf("failed to set controller reference for sandbox: %w", err)
 		logger.Error(err, "Error creating sandbox for claim: %q", claim.Name)
