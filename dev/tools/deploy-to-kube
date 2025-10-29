@@ -61,44 +61,46 @@ def walk_object(obj, fn, field_path=""):
 def main(args):
     repo_root = utils.get_repo_root()
 
-    manifests_path = os.path.join(repo_root, "k8s")
+    if args.manifest:
+        manifests_to_deploy = [args.manifest]
+    else:
+        manifests_to_deploy = []
+        manifests_path = os.path.join(repo_root, "k8s")
+        if not os.path.isdir(manifests_path):
+            print("k8s directory not found")
+            return
+        for root, dirs, files in os.walk(manifests_path):
+            for filename in files:
+                if not (filename.endswith(".yaml") or filename.endswith(".yml")):
+                    continue
+                manifests_to_deploy.append(os.path.join(root, filename))
 
-    if not os.path.isdir(manifests_path):
-        print("k8s directory not found")
-        return
+    for path in manifests_to_deploy:
+        with open(path, "r") as f:
+            # Use safe_load_all for multi-document YAML files
+            docs = list(yaml.safe_load_all(f))
 
-    for root, dirs, files in os.walk(manifests_path):
-        for filename in files:
-            if not (filename.endswith(".yaml") or filename.endswith(".yml")):
+        service_name = os.path.basename(os.path.dirname(path))
+        image_prefix = utils.get_image_prefix(args)
+        image_tag = utils.get_image_tag()
+
+        # Process each document in the file
+        for doc in docs:
+            if not doc: # Skip empty documents
                 continue
 
-            path = os.path.join(root, filename)
+            find_and_replace_images(doc, service_name, image_prefix, image_tag)
 
-            with open(path, "r") as f:
-                # Use safe_load_all for multi-document YAML files
-                docs = list(yaml.safe_load_all(f))
+        # Dump the modified documents back to a string
+        string_stream = io.StringIO()
+        yaml.dump_all(docs, string_stream)
+        modified_content = string_stream.getvalue()
 
-            service_name = os.path.basename(root)
-            image_prefix = utils.get_image_prefix(args)
-            image_tag = utils.get_image_tag()
+        rel_path = os.path.relpath(path, repo_root)
+        print(f"applying manifest {rel_path}")
 
-            # Process each document in the file
-            for doc in docs:
-                if not doc: # Skip empty documents
-                    continue
-
-                find_and_replace_images(doc, service_name, image_prefix, image_tag)
-
-            # Dump the modified documents back to a string
-            string_stream = io.StringIO()
-            yaml.dump_all(docs, string_stream)
-            modified_content = string_stream.getvalue()
-
-            rel_path = os.path.relpath(path, repo_root)
-            print(f"applying manifest {rel_path}")
-
-            cmd = ["kubectl", "apply", "-f", "-"]
-            subprocess.run(cmd, cwd=repo_root, check=True, input=modified_content, text=True)
+        cmd = ["kubectl", "apply", "-f", "-"]
+        subprocess.run(cmd, cwd=repo_root, check=True, input=modified_content, text=True)
 
 
 if __name__ == "__main__":
@@ -108,5 +110,10 @@ if __name__ == "__main__":
                         help="prefix for the image name. requires slash at the end if a path",
                         type=str,
                         default=os.getenv("IMAGE_PREFIX"))
+    parser.add_argument("--manifest",
+                        dest="manifest",
+                        help="path to a specific manifest to deploy",
+                        type=str,
+                        default=None)
     args = parser.parse_args()
     main(args)

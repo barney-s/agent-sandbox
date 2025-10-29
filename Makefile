@@ -11,11 +11,19 @@ build:
 
 KIND_CLUSTER=agent-sandbox
 
+.PHONY: deploy
+deploy:
+ifeq ($(EXTENSIONS),true)
+	./dev/tools/deploy-to-kube --image-prefix=kind.local/ --manifest=k8s/deployment-with-extensions.yaml
+else
+	./dev/tools/deploy-to-kube --image-prefix=kind.local/ --manifest=k8s/deployment.yaml
+endif
+
 .PHONY: deploy-kind
 deploy-kind:
 	./dev/tools/create-kind-cluster --recreate ${KIND_CLUSTER} --kubeconfig bin/KUBECONFIG
 	./dev/tools/push-images --image-prefix=kind.local/ --kind-cluster-name=${KIND_CLUSTER}
-	./dev/tools/deploy-to-kube --image-prefix=kind.local/
+	$(MAKE) deploy
 
 .PHONY: delete-kind
 delete-kind:
