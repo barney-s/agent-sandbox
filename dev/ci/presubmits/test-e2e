@@ -14,8 +14,8 @@
 # limitations under the License.
 
 import os
-import shutil
 import sys
+import shutil
 import subprocess
 
 from shared import utils
@@ -34,7 +34,7 @@ def main():
     result = subprocess.run([f"{repo_root}/dev/tools/push-images", "--kind-cluster-name", "e2e-test", "--image-prefix", "kind.local/"])
     if result.returncode != 0:
         return result.returncode
-    result = subprocess.run([f"{repo_root}/dev/tools/deploy-to-kube", "--image-prefix", "kind.local/"])
+    result = subprocess.run([f"{repo_root}/dev/tools/deploy-to-kube", "--image-prefix", "kind.local/", "--extensions"])
     if result.returncode != 0:
         return result.returncode
     result = subprocess.run([f"{repo_root}/dev/tools/test-e2e"])
@@ -42,7 +42,7 @@ def main():
     # Always create junit file whether tests pass or fail
     artifact_dir = os.getenv("ARTIFACTS")
     if artifact_dir:
-        shutil.copy(f"{repo_root}/bin/e2e-junit.xml", f"{artifact_dir}/junit.xml")
+        subprocess.run(["cp", f"{repo_root}/bin/e2e-junit.xml", f"{artifact_dir}/junit.xml"])
 
     return result.returncode
 

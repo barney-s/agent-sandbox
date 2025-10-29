@@ -11,11 +11,15 @@ build:
 
 KIND_CLUSTER=agent-sandbox
 
+.PHONY: deploy
+deploy:
+	./dev/tools/deploy-to-kube --image-prefix=kind.local/ $(if $(EXTENSIONS),--extensions)
+
 .PHONY: deploy-kind
 deploy-kind:
 	./dev/tools/create-kind-cluster --recreate ${KIND_CLUSTER} --kubeconfig bin/KUBECONFIG
 	./dev/tools/push-images --image-prefix=kind.local/ --kind-cluster-name=${KIND_CLUSTER}
-	./dev/tools/deploy-to-kube --image-prefix=kind.local/
+	$(MAKE) deploy
 
 .PHONY: delete-kind
 delete-kind:
@@ -27,7 +31,7 @@ test-unit:
 
 .PHONY: test-e2e
 test-e2e:
-	./dev/ci/presubmits/test-e2e
+	python3 ./dev/ci/presubmits/test-e2e
 
 .PHONY: lint-go
 lint-go:

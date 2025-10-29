@@ -72,6 +72,9 @@ def main(args):
             if not (filename.endswith(".yaml") or filename.endswith(".yml")):
                 continue
 
+            if not args.extensions and (filename == "extensions.yaml" or filename == "extensions-rbac.generated.yaml"):
+                continue
+
             path = os.path.join(root, filename)
 
             with open(path, "r") as f:
@@ -108,5 +111,9 @@ if __name__ == "__main__":
                         help="prefix for the image name. requires slash at the end if a path",
                         type=str,
                         default=os.getenv("IMAGE_PREFIX"))
+    parser.add_argument("--extensions",
+                        dest="extensions",
+                        help="apply controller extensions",
+                        action="store_true")
     args = parser.parse_args()
     main(args)
