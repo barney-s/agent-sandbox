@@ -93,22 +93,36 @@ func (r *SandboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		sandbox.Spec.Replicas = &replicas
 	}
 
-	if !sandbox.ObjectMeta.DeletionTimestamp.IsZero() {
-		log.Info("Sandbox is being deleted")
-		return ctrl.Result{}, nil
-	}
-
 	oldStatus := sandbox.Status.DeepCopy()
 	var err error
 
-	expired, requeueAfter := checkSandboxExpiry(sandbox)
-
-	// Check if sandbox has expired
-	if expired {
-		log.Info("Sandbox has expired, deleting pod and service")
-		err = r.handleSandboxExpiry(ctx, sandbox)
+	if !sandbox.ObjectMeta.DeletionTimestamp.IsZero() {
+		sandbox.Status.Phase = sandboxv1alpha1.SandboxPhaseTerminating
+		log.Info("Sandbox is being deleted")
 	} else {
-		err = r.reconcileChildResources(ctx, sandbox)
+		var requeueAfter time.Duration
+		expired, requeueAfter := checkSandboxExpiry(sandbox)
+		if expired {
+			log.Info("Sandbox has expired, deleting pod and service")
+			err = r.handleSandboxExpiry(ctx, sandbox)
+		} else {
+			err = r.reconcileChildResources(ctx, sandbox)
+		}
+		if err != nil {
+			sandbox.Status.Phase = sandboxv1alpha1.SandboxPhaseFailed
+		} else if *sandbox.Spec.Replicas == 0 {
+			sandbox.Status.Phase = sandboxv1alpha1.SandboxPhasePaused
+		} else {
+			readyCondition := meta.FindStatusCondition(sandbox.Status.Conditions, string(sandboxv1alpha1.SandboxConditionReady))
+			if readyCondition != nil && readyCondition.Status == metav1.ConditionTrue {
+				sandbox.Status.Phase = sandboxv1alpha1.SandboxPhaseRunning
+			} else {
+				sandbox.Status.Phase = sandboxv1alpha1.SandboxPhasePending
+			}
+		}
+		if requeueAfter > 0 {
+			return ctrl.Result{RequeueAfter: requeueAfter}, err
+		}
 	}
 
 	// Update status
@@ -118,7 +132,7 @@ func (r *SandboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// return errors seen
-	return ctrl.Result{RequeueAfter: requeueAfter}, err
+	return ctrl.Result{}, err
 }
 
 func (r *SandboxReconciler) reconcileChildResources(ctx context.Context, sandbox *sandboxv1alpha1.Sandbox) error {

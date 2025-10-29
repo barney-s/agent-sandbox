@@ -231,6 +231,7 @@ func TestReconcile(t *testing.T) {
 				ServiceFQDN:   "sandbox-name.sandbox-ns.svc.cluster.local",
 				Replicas:      1,
 				LabelSelector: "agents.x-k8s.io/sandbox-name-hash=ab179450", // Pre-computed hash of "sandbox-name"
+				Phase:         sandboxv1alpha1.SandboxPhasePending,
 				Conditions: []metav1.Condition{
 					{
 						Type:               "Ready",
@@ -324,6 +325,7 @@ func TestReconcile(t *testing.T) {
 				ServiceFQDN:   "sandbox-name.sandbox-ns.svc.cluster.local",
 				Replicas:      1,
 				LabelSelector: "agents.x-k8s.io/sandbox-name-hash=ab179450", // Pre-computed hash of "sandbox-name"
+				Phase:         sandboxv1alpha1.SandboxPhasePending,
 				Conditions: []metav1.Condition{
 					{
 						Type:               "Ready",
@@ -646,6 +648,99 @@ func TestSandboxExpiry(t *testing.T) {
 			} else {
 				require.Equal(t, time.Duration(0), requeueAfter)
 			}
+		})
+	}
+}
+
+func TestReconcilePhase(t *testing.T) {
+	sandboxName := "sandbox-name"
+	sandboxNs := "sandbox-ns"
+	testCases := []struct {
+		name        string
+		initialObjs []runtime.Object
+		sandbox     *sandboxv1alpha1.Sandbox
+		wantPhase   sandboxv1alpha1.SandboxPhase
+	}{
+		{
+			name:      "phase should be pending",
+			sandbox:   &sandboxv1alpha1.Sandbox{},
+			wantPhase: sandboxv1alpha1.SandboxPhasePending,
+		},
+		{
+			name: "phase should be running",
+			sandbox: &sandboxv1alpha1.Sandbox{
+				Spec: sandboxv1alpha1.SandboxSpec{
+					Replicas: ptr.To(int32(1)),
+				},
+				Status: sandboxv1alpha1.SandboxStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   "Ready",
+							Status: "True",
+						},
+					},
+				},
+			},
+			initialObjs: []runtime.Object{
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      sandboxName,
+						Namespace: sandboxNs,
+					},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						Conditions: []corev1.PodCondition{
+							{
+								Type:   corev1.PodReady,
+								Status: corev1.ConditionTrue,
+							},
+						},
+					},
+				},
+			},
+			wantPhase: sandboxv1alpha1.SandboxPhaseRunning,
+		},
+		{
+			name: "phase should be paused",
+			sandbox: &sandboxv1alpha1.Sandbox{
+				Spec: sandboxv1alpha1.SandboxSpec{
+					Replicas: ptr.To(int32(0)),
+				},
+			},
+			wantPhase: sandboxv1alpha1.SandboxPhasePaused,
+		},
+		{
+			name: "phase should be terminating",
+			sandbox: &sandboxv1alpha1.Sandbox{
+				ObjectMeta: metav1.ObjectMeta{
+					DeletionTimestamp: ptr.To(metav1.Now()),
+					Finalizers:        []string{"sandbox.finalizers.agents.x-k8s.io"},
+				},
+			},
+			wantPhase: sandboxv1alpha1.SandboxPhaseTerminating,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.sandbox.Name = sandboxName
+			tc.sandbox.Namespace = sandboxNs
+			r := SandboxReconciler{
+				Client: newFakeClient(append(tc.initialObjs, tc.sandbox)...),
+				Scheme: Scheme,
+			}
+
+			_, err := r.Reconcile(t.Context(), ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      sandboxName,
+					Namespace: sandboxNs,
+				},
+			})
+			require.NoError(t, err)
+			// Validate Sandbox status
+			liveSandbox := &sandboxv1alpha1.Sandbox{}
+			require.NoError(t, r.Get(t.Context(), types.NamespacedName{Name: sandboxName, Namespace: sandboxNs}, liveSandbox))
+			require.Equal(t, tc.wantPhase, liveSandbox.Status.Phase)
 		})
 	}
 }
