@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -648,4 +649,53 @@ func TestSandboxExpiry(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSandboxCreationLatencyMetric(t *testing.T) {
+	sandboxName := "sandbox-name"
+	sandboxNs := "sandbox-ns"
+	sb := &sandboxv1alpha1.Sandbox{}
+	sb.Name = sandboxName
+	sb.Namespace = sandboxNs
+	sb.Generation = 1
+	sb.CreationTimestamp = metav1.NewTime(time.Now().Add(-10 * time.Second))
+	sb.Spec.PodTemplate.Spec.Containers = []corev1.Container{{Name: "test-container"}}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      sandboxName,
+			Namespace: sandboxNs,
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{
+					Type:   corev1.PodReady,
+					Status: corev1.ConditionTrue,
+				},
+			},
+		},
+	}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      sandboxName,
+			Namespace: sandboxNs,
+		},
+	}
+
+	r := SandboxReconciler{
+		Client: newFakeClient(sb, pod, svc),
+		Scheme: Scheme,
+	}
+
+	_, err := r.Reconcile(t.Context(), ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      sandboxName,
+			Namespace: sandboxNs,
+		},
+	})
+	require.NoError(t, err)
+
+	// Check if the metric has been recorded
+	require.Equal(t, 1, testutil.CollectAndCount(sandboxCreationLatency))
 }
