@@ -108,15 +108,32 @@ func TestSandboxClaimReconcile(t *testing.T) {
 		},
 	}
 
+	templateWithMeta := template.DeepCopy()
+	templateWithMeta.Name = "template-with-meta"
+	templateWithMeta.Spec.PodMetadata = sandboxv1alpha1.PodMetadata{
+		Labels: map[string]string{
+			"foo": "bar",
+		},
+		Annotations: map[string]string{
+			"baz": "qux",
+		},
+	}
+	claimWithMeta := claim.DeepCopy()
+	claimWithMeta.Name = "claim-with-meta"
+	claimWithMeta.Spec.TemplateRef.Name = "template-with-meta"
+
 	testCases := []struct {
 		name              string
+		req               reconcile.Request
 		existingObjects   []client.Object
 		expectSandbox     bool
 		expectError       bool
 		expectedCondition metav1.Condition
+		validateSandbox   func(*testing.T, *v1alpha1.Sandbox)
 	}{
 		{
 			name:            "sandbox is created when a claim is made",
+			req:               newReq("test-claim", "default"),
 			existingObjects: []client.Object{template, claim},
 			expectSandbox:   true,
 			expectedCondition: metav1.Condition{
@@ -125,9 +142,35 @@ func TestSandboxClaimReconcile(t *testing.T) {
 				Reason:  "SandboxNotReady",
 				Message: "Sandbox is not ready",
 			},
+			validateSandbox: func(t *testing.T, s *v1alpha1.Sandbox) {
+				if diff := cmp.Diff(s.Spec.PodTemplate.Spec, template.Spec.PodTemplate.Spec); diff != "" {
+					t.Errorf("unexpected sandbox spec:\n%s", diff)
+				}
+			},
+		},
+		{
+			name:            "sandbox is created with pod metadata",
+			req:               newReq("claim-with-meta", "default"),
+			existingObjects: []client.Object{templateWithMeta, claimWithMeta},
+			expectSandbox:   true,
+			expectedCondition: metav1.Condition{
+				Type:    string(sandboxv1alpha1.SandboxConditionReady),
+				Status:  metav1.ConditionFalse,
+				Reason:  "SandboxNotReady",
+				Message: "Sandbox is not ready",
+			},
+			validateSandbox: func(t *testing.T, s *v1alpha1.Sandbox) {
+				if diff := cmp.Diff(s.Spec.PodTemplate.ObjectMeta.Labels, templateWithMeta.Spec.PodMetadata.Labels); diff != "" {
+					t.Errorf("unexpected sandbox labels:\n%s", diff)
+				}
+				if diff := cmp.Diff(s.Spec.PodTemplate.ObjectMeta.Annotations, templateWithMeta.Spec.PodMetadata.Annotations); diff != "" {
+					t.Errorf("unexpected sandbox annotations:\n%s", diff)
+				}
+			},
 		},
 		{
 			name:            "sandbox is not created when template is not found",
+			req:               newReq("test-claim", "default"),
 			existingObjects: []client.Object{claim},
 			expectSandbox:   false,
 			expectError:     true,
@@ -140,6 +183,7 @@ func TestSandboxClaimReconcile(t *testing.T) {
 		},
 		{
 			name:            "sandbox exists but is not controlled by claim",
+			req:               newReq("test-claim", "default"),
 			existingObjects: []client.Object{template, claim, uncontrolledSandbox},
 			expectSandbox:   true,
 			expectError:     true,
@@ -152,6 +196,7 @@ func TestSandboxClaimReconcile(t *testing.T) {
 		},
 		{
 			name:            "sandbox exists and is controlled by claim",
+			req:               newReq("test-claim", "default"),
 			existingObjects: []client.Object{template, claim, controlledSandbox},
 			expectSandbox:   true,
 			expectedCondition: metav1.Condition{
@@ -163,6 +208,7 @@ func TestSandboxClaimReconcile(t *testing.T) {
 		},
 		{
 			name:            "sandbox exists but template is not found",
+			req:               newReq("test-claim", "default"),
 			existingObjects: []client.Object{claim, readySandbox},
 			expectSandbox:   true,
 			expectedCondition: metav1.Condition{
@@ -174,6 +220,7 @@ func TestSandboxClaimReconcile(t *testing.T) {
 		},
 		{
 			name:            "sandbox is ready",
+			req:               newReq("test-claim", "default"),
 			existingObjects: []client.Object{template, claim, readySandbox},
 			expectSandbox:   true,
 			expectedCondition: metav1.Condition{
@@ -188,18 +235,13 @@ func TestSandboxClaimReconcile(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			scheme := newScheme(t)
-			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.existingObjects...).WithStatusSubresource(claim).Build()
+			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.existingObjects...).WithStatusSubresource(claim, claimWithMeta).Build()
 			reconciler := &SandboxClaimReconciler{
 				Client: client,
 				Scheme: scheme,
 			}
-			req := reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      "test-claim",
-					Namespace: "default",
-				},
-			}
-			_, err := reconciler.Reconcile(context.Background(), req)
+
+			_, err := reconciler.Reconcile(context.Background(), tc.req)
 			if tc.expectError && err == nil {
 				t.Fatal("expected an error but got none")
 			}
@@ -208,7 +250,7 @@ func TestSandboxClaimReconcile(t *testing.T) {
 			}
 
 			var sandbox v1alpha1.Sandbox
-			err = client.Get(context.Background(), req.NamespacedName, &sandbox)
+			err = client.Get(context.Background(), tc.req.NamespacedName, &sandbox)
 			if tc.expectSandbox && err != nil {
 				t.Fatalf("get sandbox: (%v)", err)
 			}
@@ -216,14 +258,12 @@ func TestSandboxClaimReconcile(t *testing.T) {
 				t.Fatalf("expected sandbox to not exist, but got err: %v", err)
 			}
 
-			if tc.expectSandbox {
-				if diff := cmp.Diff(sandbox.Spec.PodTemplate.Spec, template.Spec.PodTemplate.Spec); diff != "" {
-					t.Errorf("unexpected sandbox spec:\n%s", diff)
-				}
+			if tc.validateSandbox != nil {
+				tc.validateSandbox(t, &sandbox)
 			}
 
 			var updatedClaim extensionsv1alpha1.SandboxClaim
-			if err := client.Get(context.Background(), req.NamespacedName, &updatedClaim); err != nil {
+			if err := client.Get(context.Background(), tc.req.NamespacedName, &updatedClaim); err != nil {
 				t.Fatalf("get sandbox claim: (%v)", err)
 			}
 			if len(updatedClaim.Status.Conditions) != 1 {
@@ -255,6 +295,15 @@ func newScheme(t *testing.T) *runtime.Scheme {
 		t.Fatalf("reconcile: (%v)", err)
 	}
 	return scheme
+}
+
+func newReq(name, namespace string) reconcile.Request {
+	return reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
 }
 
 func ignoreTimestamp(_, _ metav1.Time) bool {
