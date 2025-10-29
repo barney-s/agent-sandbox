@@ -35,10 +35,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	"github.com/prometheus/client_golang/prometheus"
 	sandboxv1alpha1 "sigs.k8s.io/agent-sandbox/api/v1alpha1"
 )
+
+var (
+	sandboxCreationLatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "sandbox_creation_latency_seconds",
+			Help: "Time taken from sandbox creation to sandbox being ready",
+		},
+		[]string{"name", "namespace"},
+	)
+)
+
 
 const (
 	sandboxLabel                = "agents.x-k8s.io/sandbox-name-hash"
@@ -53,6 +66,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(Scheme))
 	utilruntime.Must(sandboxv1alpha1.AddToScheme(Scheme))
+	metrics.Registry.MustRegister(sandboxCreationLatency)
 }
 
 // SandboxReconciler reconciles a Sandbox object
@@ -149,6 +163,13 @@ func (r *SandboxReconciler) reconcileChildResources(ctx context.Context, sandbox
 	// compute and set overall Ready condition
 	readyCondition := r.computeReadyCondition(sandbox, allErrors, svc, pod)
 	meta.SetStatusCondition(&sandbox.Status.Conditions, readyCondition)
+
+	// record metric if sandbox is ready and metric has not been recorded yet
+	if readyCondition.Status == metav1.ConditionTrue && !sandbox.Status.MetricsRecorded {
+		latency := time.Since(sandbox.CreationTimestamp.Time)
+		sandboxCreationLatency.WithLabelValues(sandbox.Name, sandbox.Namespace).Observe(latency.Seconds())
+		sandbox.Status.MetricsRecorded = true
+	}
 
 	return allErrors
 }
@@ -251,6 +272,9 @@ func (r *SandboxReconciler) reconcileService(ctx context.Context, sandbox *sandb
 		}
 	} else {
 		log.Info("Found Service", "Service.Namespace", service.Namespace, "Service.Name", service.Name)
+		// TODO(barney-s) : hardcoded to svc.cluster.local which is the default. Need a way to change it.
+		sandbox.Status.ServiceFQDN = service.Name + "." + service.Namespace + ".svc.cluster.local"
+		sandbox.Status.Service = service.Name
 		return service, nil
 	}
 

@@ -399,18 +399,108 @@ func TestReconcile(t *testing.T) {
 						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{
-								"storage": resource.MustParse("10Gi"),
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			sb := &sandboxv1alpha1.Sandbox{}
+								                                "storage": resource.MustParse("10Gi"),
+								                            },
+								                        },
+								                    },
+								                },
+								            },
+								        },
+								        {
+								            name: "metric is recorded when sandbox is ready",
+								            			initialObjs: []runtime.Object{
+								            				&corev1.Pod{
+								            					ObjectMeta: metav1.ObjectMeta{
+								            						Name:      sandboxName,
+								            						Namespace: sandboxNs,
+								            					},
+								            					Spec: corev1.PodSpec{
+								            						Containers: []corev1.Container{
+								            							{
+								            								Name: "test-container",
+								            							},
+								            						},
+								            					},
+								            					Status: corev1.PodStatus{
+								            						Phase: corev1.PodRunning,
+								            						Conditions: []corev1.PodCondition{
+								            							{
+								            								Type:   corev1.PodReady,
+								            								Status: corev1.ConditionTrue,
+								            							},
+								            						},
+								            					},
+								            				},
+								            				&corev1.Service{
+								            					ObjectMeta: metav1.ObjectMeta{
+								            						Name:      sandboxName,
+								            						Namespace: sandboxNs,
+								            					},
+								            				},
+								            			},								            sandboxSpec: sandboxv1alpha1.SandboxSpec{
+								                PodTemplate: sandboxv1alpha1.PodTemplate{
+								                    Spec: corev1.PodSpec{
+								                        Containers: []corev1.Container{
+								                            {
+								                                Name: "test-container",
+								                            },
+								                        },
+								                    },
+								                },
+								            },
+								            wantStatus: sandboxv1alpha1.SandboxStatus{
+								                Service:         sandboxName,
+								                ServiceFQDN:     "sandbox-name.sandbox-ns.svc.cluster.local",
+								                Replicas:        1,
+								                LabelSelector:   "agents.x-k8s.io/sandbox-name-hash=ab179450",
+								                MetricsRecorded: true,
+								                Conditions: []metav1.Condition{
+								                    {
+								                        Type:               "Ready",
+								                        Status:             "True",
+								                        ObservedGeneration: 1,
+								                        Reason:             "DependenciesReady",
+								                        Message:            "Pod is Ready; Service Exists",
+								                    },
+								                },
+								            },
+								            wantObjs: []client.Object{
+								                &corev1.Pod{
+								                    ObjectMeta: metav1.ObjectMeta{
+								                        Name:            sandboxName,
+								                        Namespace:       sandboxNs,
+								                        ResourceVersion: "1",
+								                    },
+								                    Spec: corev1.PodSpec{
+								                        Containers: []corev1.Container{
+								                            {
+								                                Name: "test-container",
+								                            },
+								                        },
+								                    },
+								                    Status: corev1.PodStatus{
+								                        Phase: corev1.PodRunning,
+								                        Conditions: []corev1.PodCondition{
+								                            {
+								                                Type:   corev1.PodReady,
+								                                Status: corev1.ConditionTrue,
+								                            },
+								                        },
+								                    },
+								                },
+								                &corev1.Service{
+								                    ObjectMeta: metav1.ObjectMeta{
+								                        Name:            sandboxName,
+								                        Namespace:       sandboxNs,
+								                        ResourceVersion: "1",
+								                    },
+								                },
+								            },
+								        },
+								    }
+								
+								    for _, tc := range testCases {
+								        t.Run(tc.name, func(t *testing.T) {			sb := &sandboxv1alpha1.Sandbox{}
 			sb.Name = sandboxName
 			sb.Namespace = sandboxNs
 			sb.Generation = 1
@@ -441,7 +531,12 @@ func TestReconcile(t *testing.T) {
 				liveObj := obj.DeepCopyObject().(client.Object)
 				err = r.Get(t.Context(), types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, liveObj)
 				require.NoError(t, err)
-				require.Equal(t, obj, liveObj)
+				opts := []cmp.Option{
+					cmpopts.IgnoreFields(metav1.ObjectMeta{}, "ResourceVersion"),
+				}
+				if diff := cmp.Diff(obj, liveObj, opts...); diff != "" {
+					t.Fatalf("unexpected object (-want,+got):\n%s", diff)
+				}
 			}
 		})
 	}

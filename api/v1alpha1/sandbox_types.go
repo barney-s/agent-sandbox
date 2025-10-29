@@ -138,6 +138,10 @@ type SandboxStatus struct {
 	// LabelSelector is the label selector for pods.
 	// +optional
 	LabelSelector string `json:"selector,omitempty"`
+
+	// MetricsRecorded is a boolean that tracks whether the creation latency metric has been recorded for this sandbox.
+	// +optional
+	MetricsRecorded bool `json:"metricsRecorded,omitempty"`
 }
 
 // +kubebuilder:object:root=true
