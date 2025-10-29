@@ -119,8 +119,28 @@ type SandboxSpec struct {
 	Replicas *int32 `json:"replicas,omitempty"`
 }
 
+// SandboxPhase is a label for the condition of a sandbox at the current time.
+type SandboxPhase string
+
+const (
+	// SandboxPhasePending means the sandbox is waiting to be processed.
+	SandboxPhasePending SandboxPhase = "Pending"
+	// SandboxPhaseRunning means the sandbox is running and ready to be used.
+	SandboxPhaseRunning SandboxPhase = "Running"
+	// SandboxPhasePaused means the sandbox has been paused.
+	SandboxPhasePaused SandboxPhase = "Paused"
+	// SandboxPhaseTerminating means the sandbox is terminating.
+	SandboxPhaseTerminating SandboxPhase = "Terminating"
+	// SandboxPhaseUnknown means the sandbox state is unknown.
+	SandboxPhaseUnknown SandboxPhase = "Unknown"
+)
+
 // SandboxStatus defines the observed state of Sandbox.
 type SandboxStatus struct {
+	// Phase is the current phase of the sandbox.
+	// +optional
+	Phase SandboxPhase `json:"phase,omitempty"`
+
 	// FQDN that is valid for default cluster settings
 	// Limitation: Hardcoded to the domain .cluster.local
 	// e.g. sandbox-example.default.svc.cluster.local

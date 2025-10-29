@@ -93,8 +93,13 @@ func (r *SandboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		sandbox.Spec.Replicas = &replicas
 	}
 
+	if sandbox.Status.Phase == "" {
+		sandbox.Status.Phase = sandboxv1alpha1.SandboxPhasePending
+	}
+
 	if !sandbox.ObjectMeta.DeletionTimestamp.IsZero() {
 		log.Info("Sandbox is being deleted")
+		sandbox.Status.Phase = sandboxv1alpha1.SandboxPhaseTerminating
 		return ctrl.Result{}, nil
 	}
 
@@ -137,6 +142,9 @@ func (r *SandboxReconciler) reconcileChildResources(ctx context.Context, sandbox
 	if pod == nil {
 		sandbox.Status.Replicas = 0
 		sandbox.Status.LabelSelector = ""
+		if sandbox.Spec.Replicas != nil && *sandbox.Spec.Replicas == 0 {
+			sandbox.Status.Phase = sandboxv1alpha1.SandboxPhasePaused
+		}
 	} else {
 		sandbox.Status.Replicas = 1
 		sandbox.Status.LabelSelector = fmt.Sprintf("%s=%s", sandboxLabel, NameHash(sandbox.Name))
@@ -207,6 +215,9 @@ func (r *SandboxReconciler) computeReadyCondition(sandbox *sandboxv1alpha1.Sandb
 	if podReady && svcReady {
 		readyCondition.Status = metav1.ConditionTrue
 		readyCondition.Reason = "DependenciesReady"
+		if pod != nil {
+			sandbox.Status.Phase = sandboxv1alpha1.SandboxPhaseRunning
+		}
 		return readyCondition
 	}
 
@@ -431,6 +442,7 @@ func (r *SandboxReconciler) handleSandboxExpiry(ctx context.Context, sandbox *sa
 		Message:            "Sandbox has expired",
 	})
 
+	sandbox.Status.Phase = sandboxv1alpha1.SandboxPhaseTerminating
 	sandbox.Status.Replicas = 0
 	sandbox.Status.LabelSelector = ""
 

@@ -197,6 +197,9 @@ func TestComputeReadyCondition(t *testing.T) {
 			require.Equal(t, tc.sandbox.Generation, condition.ObservedGeneration)
 			require.Equal(t, tc.expectedStatus, condition.Status)
 			require.Equal(t, tc.expectedReason, condition.Reason)
+			if tc.expectedReason == "DependenciesReady" {
+				require.Equal(t, sandboxv1alpha1.SandboxPhaseRunning, tc.sandbox.Status.Phase)
+			}
 		})
 	}
 }
@@ -227,6 +230,7 @@ func TestReconcile(t *testing.T) {
 			},
 			// Verify Sandbox status
 			wantStatus: sandboxv1alpha1.SandboxStatus{
+				Phase:         sandboxv1alpha1.SandboxPhasePending,
 				Service:       sandboxName,
 				ServiceFQDN:   "sandbox-name.sandbox-ns.svc.cluster.local",
 				Replicas:      1,
@@ -320,6 +324,7 @@ func TestReconcile(t *testing.T) {
 			},
 			// Verify Sandbox status
 			wantStatus: sandboxv1alpha1.SandboxStatus{
+				Phase:         sandboxv1alpha1.SandboxPhasePending,
 				Service:       sandboxName,
 				ServiceFQDN:   "sandbox-name.sandbox-ns.svc.cluster.local",
 				Replicas:      1,
@@ -399,17 +404,59 @@ func TestReconcile(t *testing.T) {
 						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{
-								"storage": resource.MustParse("10Gi"),
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+								                                "storage": resource.MustParse("10Gi"),
+															},
+														},
+													},
+												},
+											},
+										},
+										{
+											name: "sandbox spec with 0 replicas",
+											sandboxSpec: sandboxv1alpha1.SandboxSpec{
+												Replicas: ptr.To(int32(0)),
+											},
+											// Verify Sandbox status
+											wantStatus: sandboxv1alpha1.SandboxStatus{
+												Phase:         sandboxv1alpha1.SandboxPhasePaused,
+												Service:       sandboxName,
+												ServiceFQDN:   "sandbox-name.sandbox-ns.svc.cluster.local",
+												Replicas:      0,
+												LabelSelector: "", // Pre-computed hash of "sandbox-name"
+												Conditions: []metav1.Condition{
+													{
+														Type:               "Ready",
+														Status:             "True",
+														ObservedGeneration: 1,
+														Reason:             "DependenciesReady",
+														Message:            "Pod does not exist, replicas is 0; Service Exists",
+													},
+												},
+											},
+											wantObjs: []client.Object{
+												// Verify Service
+												&corev1.Service{
+													ObjectMeta: metav1.ObjectMeta{
+														Name:            sandboxName,
+														Namespace:       sandboxNs,
+														ResourceVersion: "1",
+														Labels: map[string]string{
+															"agents.x-k8s.io/sandbox-name-hash": "ab179450",
+														},
+														OwnerReferences: []metav1.OwnerReference{sandboxControllerRef(sandboxName)},
+													},
+													Spec: corev1.ServiceSpec{
+														Selector: map[string]string{
+															"agents.x-k8s.io/sandbox-name-hash": "ab179450",
+														},
+														ClusterIP: "None",
+													},
+												},
+											},
+										},
+									}
+								
+									for _, tc := range testCases {		t.Run(tc.name, func(t *testing.T) {
 			sb := &sandboxv1alpha1.Sandbox{}
 			sb.Name = sandboxName
 			sb.Namespace = sandboxNs
@@ -610,42 +657,60 @@ func TestReconcilePod(t *testing.T) {
 }
 
 func TestSandboxExpiry(t *testing.T) {
+	sandboxName := "sandbox-name"
+	sandboxNs := "sandbox-ns"
 	testCases := []struct {
 		name         string
 		shutdownTime *metav1.Time
 		wantExpired  bool
 		wantRequeue  bool
+		wantPhase    sandboxv1alpha1.SandboxPhase
 	}{
 		{
 			name:         "nil shutdown time",
 			shutdownTime: nil,
 			wantExpired:  false,
 			wantRequeue:  false,
+			wantPhase:    sandboxv1alpha1.SandboxPhasePending,
 		},
 		{
 			name:         "shutdown time in future",
 			shutdownTime: ptr.To(metav1.NewTime(time.Now().Add(2 * time.Hour))),
 			wantExpired:  false,
 			wantRequeue:  true,
+			wantPhase:    sandboxv1alpha1.SandboxPhasePending,
 		},
 		{
 			name:         "shutdown time in past",
 			shutdownTime: ptr.To(metav1.NewTime(time.Now().Add(-10 * time.Second))),
 			wantExpired:  true,
 			wantRequeue:  false,
+			wantPhase:    sandboxv1alpha1.SandboxPhaseTerminating,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			sandbox := &sandboxv1alpha1.Sandbox{}
-			sandbox.Spec.ShutdownTime = tc.shutdownTime
-			expired, requeueAfter := checkSandboxExpiry(sandbox)
-			require.Equal(t, tc.wantExpired, expired)
-			if tc.wantRequeue {
-				require.Greater(t, requeueAfter, time.Duration(0))
-			} else {
-				require.Equal(t, time.Duration(0), requeueAfter)
+			sb := &sandboxv1alpha1.Sandbox{}
+			sb.Name = sandboxName
+			sb.Namespace = sandboxNs
+			sb.Generation = 1
+			sb.Spec.ShutdownTime = tc.shutdownTime
+			r := SandboxReconciler{
+				Client: newFakeClient(sb),
+				Scheme: Scheme,
 			}
+
+			_, err := r.Reconcile(t.Context(), ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      sandboxName,
+					Namespace: sandboxNs,
+				},
+			})
+			require.NoError(t, err)
+
+			liveSandbox := &sandboxv1alpha1.Sandbox{}
+			require.NoError(t, r.Get(t.Context(), types.NamespacedName{Name: sandboxName, Namespace: sandboxNs}, liveSandbox))
+			require.Equal(t, tc.wantPhase, liveSandbox.Status.Phase)
 		})
 	}
 }
