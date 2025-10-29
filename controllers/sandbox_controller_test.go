@@ -404,59 +404,60 @@ func TestReconcile(t *testing.T) {
 						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{
-								                                "storage": resource.MustParse("10Gi"),
-															},
-														},
-													},
-												},
-											},
-										},
-										{
-											name: "sandbox spec with 0 replicas",
-											sandboxSpec: sandboxv1alpha1.SandboxSpec{
-												Replicas: ptr.To(int32(0)),
-											},
-											// Verify Sandbox status
-											wantStatus: sandboxv1alpha1.SandboxStatus{
-												Phase:         sandboxv1alpha1.SandboxPhasePaused,
-												Service:       sandboxName,
-												ServiceFQDN:   "sandbox-name.sandbox-ns.svc.cluster.local",
-												Replicas:      0,
-												LabelSelector: "", // Pre-computed hash of "sandbox-name"
-												Conditions: []metav1.Condition{
-													{
-														Type:               "Ready",
-														Status:             "True",
-														ObservedGeneration: 1,
-														Reason:             "DependenciesReady",
-														Message:            "Pod does not exist, replicas is 0; Service Exists",
-													},
-												},
-											},
-											wantObjs: []client.Object{
-												// Verify Service
-												&corev1.Service{
-													ObjectMeta: metav1.ObjectMeta{
-														Name:            sandboxName,
-														Namespace:       sandboxNs,
-														ResourceVersion: "1",
-														Labels: map[string]string{
-															"agents.x-k8s.io/sandbox-name-hash": "ab179450",
-														},
-														OwnerReferences: []metav1.OwnerReference{sandboxControllerRef(sandboxName)},
-													},
-													Spec: corev1.ServiceSpec{
-														Selector: map[string]string{
-															"agents.x-k8s.io/sandbox-name-hash": "ab179450",
-														},
-														ClusterIP: "None",
-													},
-												},
-											},
-										},
-									}
-								
-									for _, tc := range testCases {		t.Run(tc.name, func(t *testing.T) {
+								"storage": resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "sandbox spec with 0 replicas",
+			sandboxSpec: sandboxv1alpha1.SandboxSpec{
+				Replicas: ptr.To(int32(0)),
+			},
+			// Verify Sandbox status
+			wantStatus: sandboxv1alpha1.SandboxStatus{
+				Phase:         sandboxv1alpha1.SandboxPhasePaused,
+				Service:       sandboxName,
+				ServiceFQDN:   "sandbox-name.sandbox-ns.svc.cluster.local",
+				Replicas:      0,
+				LabelSelector: "", // Pre-computed hash of "sandbox-name"
+				Conditions: []metav1.Condition{
+					{
+						Type:               "Ready",
+						Status:             "True",
+						ObservedGeneration: 1,
+						Reason:             "DependenciesReady",
+						Message:            "Pod does not exist, replicas is 0; Service Exists",
+					},
+				},
+			},
+			wantObjs: []client.Object{
+				// Verify Service
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            sandboxName,
+						Namespace:       sandboxNs,
+						ResourceVersion: "1",
+						Labels: map[string]string{
+							"agents.x-k8s.io/sandbox-name-hash": "ab179450",
+						},
+						OwnerReferences: []metav1.OwnerReference{sandboxControllerRef(sandboxName)},
+					},
+					Spec: corev1.ServiceSpec{
+						Selector: map[string]string{
+							"agents.x-k8s.io/sandbox-name-hash": "ab179450",
+						},
+						ClusterIP: "None",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
 			sb := &sandboxv1alpha1.Sandbox{}
 			sb.Name = sandboxName
 			sb.Namespace = sandboxNs
