@@ -39,26 +39,24 @@ IMAGES_TO_PROMOTE = [
 def get_remote_name(cwd=None, preferred_remote=None):
     """Returns the preferred remote if specified and exists, or 'upstream' if it exists.
     Falls back to 'origin' if neither are found.
-    Raises an exception if no valid remote is found.
     """
-    try:
-        remotes_output = run_command(["git", "remote"], cwd=cwd, capture_output=True, allow_error=True)
-        if not remotes_output:
-            return "origin"
-        
-        remotes = remotes_output.splitlines()
-        if preferred_remote and preferred_remote in remotes:
-            return preferred_remote
-        
-        if "upstream" in remotes:
-            return "upstream"
-            
-        if "origin" in remotes:
-            return "origin"
-        
+    remotes_output = run_command(
+        ["git", "remote"],
+        cwd=cwd,
+        capture_output=True,
+        allow_error=True,
+    )
+    if not remotes_output or not remotes_output.strip():
         return "origin"
-    except Exception:
-        return "origin"
+
+    remotes = remotes_output.splitlines()
+    if preferred_remote and preferred_remote in remotes:
+        return preferred_remote
+
+    if "upstream" in remotes:
+        return "upstream"
+
+    return "origin"
 
 def check_environment():
     """Checks if the required tools are installed and authenticated."""

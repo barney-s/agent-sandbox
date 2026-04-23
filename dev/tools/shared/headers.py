@@ -63,6 +63,7 @@ DEFAULT_EXCLUDES = [
     "node_modules/**",
     "vendor/**",
     "bin/**",
+    "bin/",
     "**/*.yaml",
     "**/*.yml",
     "**/LICENSE",

@@ -1,3 +1,3 @@
-module github.com/kubernetes-sigs/agent-sandbox
+module sigs.k8s.io/agent-sandbox/site
 
 go 1.26.2
