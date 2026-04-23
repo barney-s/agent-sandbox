@@ -86,7 +86,7 @@ REMOTE_FORK ?= origin
 .PHONY: release-promote
 release-promote:
 	@if [ -z "$(TAG)" ]; then echo "TAG is required (e.g., make release-promote TAG=vX.Y.Z)"; exit 1; fi
-	./dev/tools/tag-promote-images --tag=${TAG} --k8s-io-dir=${K8S_IO_DIR} --upstream-remote=${REMOTE_UPSTREAM} --fork-remote=${REMOTE_FORK}
+	./dev/tools/tag-promote-images --tag="$(TAG)" --k8s-io-dir="$(K8S_IO_DIR)" --upstream-remote="$(REMOTE_UPSTREAM)" --fork-remote="$(REMOTE_FORK)"
 
 # Publish a draft release to GitHub
 # Usage: make release-publish TAG=vX.Y.Z
@@ -95,7 +95,7 @@ release-publish:
 	@if [ -z "$(TAG)" ]; then echo "TAG is required (e.g., make release-publish TAG=vX.Y.Z)"; exit 1; fi
 	go mod tidy
 	go generate ./...
-	./dev/tools/release --tag=${TAG} --publish
+	./dev/tools/release --tag="$(TAG)" --publish
 
 # Generate release manifests only
 # Usage: make release-manifests TAG=vX.Y.Z
@@ -104,14 +104,14 @@ release-manifests:
 	@if [ -z "$(TAG)" ]; then echo "TAG is required (e.g., make release-manifests TAG=vX.Y.Z)"; exit 1; fi
 	go mod tidy
 	go generate ./...
-	./dev/tools/release --tag=${TAG}
+	./dev/tools/release --tag="$(TAG)"
 
 # Example usage:
 # make release-python-sdk TAG=v0.1.1.post1 (for patch release on PyPI)
 .PHONY: release-python-sdk
 release-python-sdk:
 	@if [ -z "$(TAG)" ]; then echo "TAG is required (e.g., make release-python-sdk TAG=vX.Y.Z.postN)"; exit 1; fi
-	./dev/tools/release-python --tag=${TAG} --remote=${REMOTE_UPSTREAM}
+	./dev/tools/release-python --tag="$(TAG)" --remote="$(REMOTE_UPSTREAM)"
 
 .PHONY: toc-update
 toc-update:

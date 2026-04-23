@@ -146,15 +146,19 @@ def generate_highlights(commits, breaking_changes, pr_descriptions, tag):
     commit_messages = "\n".join([f"- {c['title']}\n  {c['body']}" for c in commits])
     pr_desc_str = "\n".join([f"- {desc}" for desc in pr_descriptions])
 
-    prompt = f"""**Task:** Generate curated release notes for **Agent Sandbox release draft** {tag} from the provided information, following the structure and tone of the ideal example below.
+    prompt = f"""**Task:** Given a release version number, generate curated release notes for **Agent Sandbox release draft** {tag} from "What's Changed", following the structure and tone of the last official release.
 
 **Instructions:**
-- Generate only the **Key Highlights**, **Contributors**, and **New Contributors** sections.
-- Summarize the highlights into a few key areas with bold titles describing the feature area (e.g., **Python SDK Advancements**, **Core Stability**).
-- Synthesize information from full commit messages and PR descriptions to describe changes accurately.
+- Group improvements by feature area with bold titles (e.g., **Key Highlights**).
+- Summarize documentation, observability, stability, and SDK improvements.
 - Mention breaking changes explicitly if any are provided.
-- List contributors as handles (e.g., @handle), extracting them from the provided data.
+- Thank contributors and find their names/handles (e.g., @handle) from the provided data.
 - Tone should be professional, encouraging, and concise.
+
+**Structure:**
+1. **Brief Intro:** Summary of key improvements.
+2. ### Key Highlights (Grouped by feature area with bold titles).
+3. ## Contributors (Thank them, list names/handles).
 
 Input Commit Titles:
 {commit_titles}
@@ -236,12 +240,12 @@ pip install k8s-agent-sandbox=={tag.lstrip('v')}
 ```
 """
 
-    combined_content = f"# 🚀 Announcing Agent Sandbox {tag}!\n"
+    combined_content = f"## 🚀 Announcing Agent Sandbox {tag}!\n"
     if highlights:
         combined_content += highlights + "\n\n"
-        combined_content += installation_notes + "\n\n"
+        combined_content += installation_notes + "\n"
     else:
-        combined_content += installation_notes + "\n\n"
+        combined_content += installation_notes + "\n"
 
     if combined_content:
         print(f"INFO: Saving release notes to {args.output}...")
