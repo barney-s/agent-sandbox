@@ -52,8 +52,8 @@ jobs:
           git remote rename origin upstream
           gh repo fork --clone=false || true # Ignore if already exists or fails to add remote if already there
           # Ensure origin remote points to the fork
-          GH_USER=$(gh api user --jq .login)
-          git remote add origin "https://x-access-token:${{ secrets.K8S_IO_PAT }}@github.com/$GH_USER/k8s.io.git" || git remote set-url origin "https://x-access-token:${{ secrets.K8S_IO_PAT }}@github.com/$GH_USER/k8s.io.git"
+          GH_USER="$(gh api user --jq .login)"
+          git remote add origin "https://x-access-token:${{ secrets.K8S_IO_PAT }}@github.com/${GH_USER}/k8s.io.git" || git remote set-url origin "https://x-access-token:${{ secrets.K8S_IO_PAT }}@github.com/${GH_USER}/k8s.io.git"
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
@@ -76,7 +76,8 @@ jobs:
         id: set-tag
         run: |
           echo "run_release=true" >> "$GITHUB_OUTPUT"
-          echo "new_tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          NEW_TAG="${{ github.event.inputs.tag }}"
+          echo "new_tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Auto Tag if New Commits
         if: github.event.inputs.tag == ''
@@ -101,9 +102,9 @@ jobs:
             exit 1
           fi
 
-          PR_URL=$(cat promote_pr.url)
-          echo "Found PR: $PR_URL"
-          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          PR_URL="$(cat promote_pr.url)"
+          echo "Found PR: ${PR_URL}"
+          echo "pr_url=${PR_URL}" >> "$GITHUB_OUTPUT"
 
   # Restart release from this step if the job times out
   poll-merge:
@@ -119,19 +120,19 @@ jobs:
           GH_TOKEN: ${{ secrets.K8S_IO_PAT }}
           PR_URL: ${{ needs.promote.outputs.pr_url }}
         run: |
-          echo "Waiting for $PR_URL to be merged..."
+          echo "Waiting for ${PR_URL} to be merged..."
 
           # 144 attempts, every 5 minutes = 12 hours total
           for i in {1..144}; do
             # Explicitly check the kubernetes/k8s.io repo context
-            STATE=$(gh pr view "$PR_URL" --repo kubernetes/k8s.io --json state --jq '.state')
+            STATE="$(gh pr view "${PR_URL}" --repo kubernetes/k8s.io --json state --jq '.state')"
             
-            echo "Attempt $i: PR is currently $STATE"
+            echo "Attempt ${i}: PR is currently ${STATE}"
             
-            if [ "$STATE" == "MERGED" ]; then
+            if [ "${STATE}" = "MERGED" ]; then
               echo "✅ PR merged. Proceeding."
               exit 0
-            elif [ "$STATE" == "CLOSED" ]; then
+            elif [ "${STATE}" = "CLOSED" ]; then
               echo "❌ PR was closed without merging."
               exit 1
             fi
@@ -171,4 +172,5 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           # This finally publishes the draft for your review
-          make release-publish TAG="${{ needs.promote.outputs.new_tag }}"
+          NEW_TAG="${{ needs.promote.outputs.new_tag }}"
+          make release-publish TAG="${NEW_TAG}"
