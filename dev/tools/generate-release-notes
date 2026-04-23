@@ -148,23 +148,20 @@ def generate_highlights(commits, breaking_changes, pr_descriptions, tag):
 
     prompt = f"""**Task:** Given a release version number, generate curated release notes for **Agent Sandbox release draft** {tag} from "What's Changed", following the structure and tone of the last official release.
 
-**1. Reference Format:**
+**Reference Format:**
 - **Title:** ## 🚀 Announcing Agent Sandbox {tag}!
-- **Intro:** Brief summary of key improvements (documentation, observability, stability).
+- **Intro:** Brief summary of key improvements (e.g., documentation, observability, stability).
 - **Sections:** 
-    - `### Key Highlights` (Grouped by feature area with bold titles).
-    - `### Installation` (Code blocks for `kubectl apply`).
-    - `## Contributors` (Thank them, find their names/handles (e.g., @handle) from the provided data, and sort them by PR submission time).
-    - `### 👋 New Contributors` (Copy from draft).
-    - `Full Changelog` (Copy from draft).
+    - `### Key Highlights` (Grouped by feature area with bold titles like **Observability**, **Core**, etc.).
+    - `## Contributors` (Thank them, find their names/handles from the provided data, and sort them by PR submission time).
 
 **Instructions:**
-- Group improvements by feature area with bold titles (e.g., **Documentation**, **Observability**, **Stability**).
+- Group improvements by feature area with bold titles.
 - Summarize key improvements clearly and concisely.
-- Mention breaking changes explicitly if any are provided.
-- Find contributor names/handles from the provided commit and PR data.
+- **CRITICAL:** If any breaking changes are provided in the "Breaking Changes" section below, you MUST include a dedicated `### ⚠️ Breaking Changes` section and summarize them.
+- Find contributor names/handles (e.g., @user) from the provided commit and PR data.
 - Tone should be professional, encouraging, and concise.
-- DO NOT include the "Installation", "New Contributors", or "Full Changelog" sections in your output as they will be appended separately; focus on the Title, Intro, Key Highlights, and Contributors sections.
+- Focus ONLY on the Title, Intro, Key Highlights, and Contributors sections. Do not generate Installation or Changelog sections.
 
 Input Commit Titles:
 {commit_titles}
