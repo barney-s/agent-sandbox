@@ -42,7 +42,11 @@ def get_remote_name(cwd=None, preferred_remote=None):
     Raises an exception if no valid remote is found.
     """
     try:
-        remotes = run_command(["git", "remote"], cwd=cwd, capture_output=True).splitlines()
+        remotes_output = run_command(["git", "remote"], cwd=cwd, capture_output=True, allow_error=True)
+        if not remotes_output:
+            return "origin"
+        
+        remotes = remotes_output.splitlines()
         if preferred_remote and preferred_remote in remotes:
             return preferred_remote
         
@@ -52,11 +56,9 @@ def get_remote_name(cwd=None, preferred_remote=None):
         if "origin" in remotes:
             return "origin"
         
-        raise Exception(
-            f"Could not find any valid git remote. Available remotes: {remotes}. "
-        )
-    except Exception as e:
-        raise Exception(f"Failed to determine git remote: {e}")
+        return "origin"
+    except Exception:
+        return "origin"
 
 def check_environment():
     """Checks if the required tools are installed and authenticated."""
