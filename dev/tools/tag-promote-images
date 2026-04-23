@@ -46,7 +46,7 @@ def get_remote_name(cwd=None, preferred_remote=None):
         capture_output=True,
         allow_error=True,
     )
-    if not remotes_output or not remotes_output.strip():
+    if not remotes_output:
         return "origin"
 
     remotes = remotes_output.splitlines()

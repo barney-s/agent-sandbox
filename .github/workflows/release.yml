@@ -51,6 +51,7 @@ jobs:
         env:
           # Use a Fine-Grained PAT scoped to kubernetes/k8s.io with contents:write and pull_requests:write
           GH_TOKEN: ${{ secrets.K8S_IO_PAT }}
+        shell: bash
         run: |
           cd ..
           git clone https://github.com/kubernetes/k8s.io.git
@@ -72,6 +73,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Setup Git Identity
+        shell: bash
         run: |
           # Use the standard GitHub Actions Bot identity
           git config --global user.name "github-actions[bot]"
@@ -80,15 +82,16 @@ jobs:
       - name: Set Tag from Input
         if: github.event.inputs.tag != ''
         id: set-tag
-        env:
-          INPUT_TAG: ${{ github.event.inputs.tag }}
+        shell: bash
         run: |
+          input_tag="${{ github.event.inputs.tag }}"
           echo "run_release=true" >> "$GITHUB_OUTPUT"
-          echo "new_tag=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
+          echo "new_tag=${input_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Auto Tag if New Commits
         if: github.event.inputs.tag == ''
         id: auto-tag
+        shell: bash
         run: |
           ./dev/tools/auto-tag
 
@@ -100,6 +103,7 @@ jobs:
           GH_TOKEN: ${{ secrets.K8S_IO_PAT }}
           TAG_FROM_INPUT: ${{ steps.set-tag.outputs.new_tag }}
           TAG_FROM_AUTO: ${{ steps.auto-tag.outputs.new_tag }}
+        shell: bash
         run: |
           # Run promotion script
           tag="${TAG_FROM_INPUT:-$TAG_FROM_AUTO}"
@@ -128,6 +132,7 @@ jobs:
           # Use a Fine-Grained PAT scoped to kubernetes/k8s.io with contents:write and pull_requests:write
           GH_TOKEN: ${{ secrets.K8S_IO_PAT }}
           PR_URL: ${{ needs.promote.outputs.pr_url }}
+        shell: bash
         run: |
           echo "Waiting for \"${PR_URL}\" to be merged..."
 
@@ -180,6 +185,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TAG: ${{ needs.promote.outputs.new_tag }}
+        shell: bash
         run: |
           # This finally publishes the draft for your review
-          make release-publish TAG="$TAG"
+          make release-publish TAG="${TAG}"
