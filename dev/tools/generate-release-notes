@@ -148,17 +148,22 @@ def generate_highlights(commits, breaking_changes, pr_descriptions, tag):
 
     prompt = f"""**Task:** Given a release version number, generate curated release notes for **Agent Sandbox release draft** {tag} from "What's Changed", following the structure and tone of the last official release.
 
+**Reference Format:**
+- **Title:** ## 🚀 Announcing Agent Sandbox {tag}!
+- **Intro:** Brief summary of key improvements (documentation, observability, stability).
+- **Sections:** 
+    - `### Key Highlights` (Grouped by feature area with bold titles).
+    - `### Installation` (Code blocks for `kubectl apply`).
+    - `## Contributors` (Thank them, list names/handles from "What's Changed", and sort them by PR submission time).
+    - `### 👋 New Contributors` (Copy from draft).
+    - `Full Changelog` (Copy from draft).
+
 **Instructions:**
 - Group improvements by feature area with bold titles (e.g., **Key Highlights**).
 - Summarize documentation, observability, stability, and SDK improvements.
 - Mention breaking changes explicitly if any are provided.
 - Thank contributors and find their names/handles (e.g., @handle) from the provided data.
 - Tone should be professional, encouraging, and concise.
-
-**Structure:**
-1. **Brief Intro:** Summary of key improvements.
-2. ### Key Highlights (Grouped by feature area with bold titles).
-3. ## Contributors (Thank them, list names/handles).
 
 Input Commit Titles:
 {commit_titles}
