@@ -152,7 +152,9 @@ def generate_highlights(commits, breaking_changes, pr_descriptions, tag):
 - Generate only the **Key Highlights**, **Contributors**, and **New Contributors** sections.
 - Summarize the highlights into a few key areas with bold titles describing the feature area (e.g., **Python SDK Advancements**, **Core Stability**).
 - Synthesize information from full commit messages and PR descriptions to describe changes accurately.
+- Mention breaking changes explicitly if any are provided.
 - List contributors as handles (e.g., @handle), extracting them from the provided data.
+- Tone should be professional, encouraging, and concise.
 
 Input Commit Titles:
 {commit_titles}
