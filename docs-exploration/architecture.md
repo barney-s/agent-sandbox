@@ -17,7 +17,7 @@ graph TD
     SC[SandboxClaim] -->|claims / adopts| S
     S -->|owns / reconciles| P[Pod]
     S -->|owns / reconciles| PVC[PersistentVolumeClaim]
-    S -->|owns / reconciles| SVC[Service (Optional)]
+    S -->|owns / reconciles| SVC["Service (Optional)"]
 ```
 
 ### Key Abstractions (Control Plane)
@@ -48,23 +48,23 @@ sequenceDiagram
     K8s -->> Cache: Pod events (List/Watch)
     Cache -->> Router: Local cache sync
 
-    Client ->> Router: HTTP Request with X-Sandbox-ID & X-Sandbox-UID
+    Client ->> Router: "HTTP Request with X-Sandbox-ID & X-Sandbox-UID"
     rect rgb(230, 245, 255)
         Note over Router: Resolution Priority
-        alt X-Sandbox-Pod-IP is set
+        alt [X-Sandbox-Pod-IP is set]
             Note over Router: Use direct IP (SSRF validated)
-        else X-Sandbox-UID is set and in cache
+        else [X-Sandbox-UID is set and in cache]
             Router ->> Cache: Lookup by UID (Fast Path)
             Cache -->> Router: Return Pod IP
-        else X-Sandbox-Namespace/ID in cache
+        else [X-Sandbox-Namespace/ID in cache]
             Router ->> Cache: Lookup by Pod name index
             Cache -->> Router: Return Pod IP
-        else Cache Miss
+        else [Cache Miss]
             Note over Router: Fallback to standard DNS
         end
     end
-    Router ->> Pod: Dial & Proxy (with stripped/injected headers)
-    Pod -->> Router: HTTP/WebSocket Stream
+    Router ->> Pod: "Dial & Proxy (with stripped/injected headers)"
+    Pod -->> Router: "HTTP/WebSocket Stream"
     Router -->> Client: Stream Response
 ```
 
