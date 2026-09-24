@@ -1,5 +1,7 @@
 # Deploying to kOps on GCP (3-Node Cluster)
 
+> **Revision Note**: Steps 4 and 8 have been updated to support Uniform Bucket-Level Access (UBLA) and storage.objectAdmin IAM bindings, and to export and set the KUBECONFIG environment variable correctly.
+
 This runbook guides you through deploying `agent-sandbox` to a self-managed, gossip-based, 3-node Kubernetes cluster on GCP using GCE VMs provisioned via **kOps** (Kubernetes Operations).
 
 ---
@@ -24,10 +26,11 @@ Before execution, verify the following prerequisites in your environment. Run th
 | **`kops` CLI** | `✗ MISSING` | `kops version` | `GOBIN="${HOME}/go/bin" go install k8s.io/kops/cmd/kops@v1.36.0` (Compiles on demand) |
 | **GCP IAM Permissions** | `✓ Present` | `gcloud projects get-iam-policy $PROJECT_ID --limit=1` | Contact your GCP Organization Admin for `roles/owner` or `roles/editor` on the project. |
 
-### GCP IAM Roles Required
+### GCP IAM Roles Required & Buckets Security
 To run kOps, your active Google Cloud identity (user or service account) must have high-level permissions on your target GCP project:
 - **`roles/owner`** or **`roles/editor`** on the target project (needed to create VPC, Firewalls, Service Accounts, GCE Instances, GCS Buckets).
 - **`roles/storage.objectAdmin`** on the bucket used for the state store.
+- **Uniform Bucket-Level Access (UBLA):** GCS state store bucket creation must specify `--uniform-bucket-level-access` when running in federated/Workload Identity Federation (WIF) environments to satisfy authentication requirements.
 
 ### Cost to Tear Down
 Teardown will clean up all created resources:
@@ -88,10 +91,21 @@ Build the `agent-sandbox-controller` and related images, then push them to your 
 ```
 
 ### 4. Create the GCS State Store Bucket
-Create a Google Cloud Storage bucket where kOps will store the state configuration of the cluster:
+Create a Google Cloud Storage bucket where kOps will store the state configuration of the cluster. We enable Uniform Bucket-Level Access (UBLA) and grant `roles/storage.objectAdmin` on the bucket to avoid authentication issues in federated/WIF environments:
 ```sh
-# Create GCS Bucket in the target region
-gcloud storage buckets create "gs://${BUCKET_NAME}" --project="${PROJECT_ID}" --location="${REGION}"
+gcloud storage buckets create "gs://${BUCKET_NAME}" \
+  --project="${PROJECT_ID}" \
+  --location="${REGION}" \
+  --uniform-bucket-level-access
+
+gcloud storage buckets update "gs://${BUCKET_NAME}" \
+  --update-labels="repo-agent-instance=${RESOURCE_PREFIX}" || true
+
+# Grant storage.objectAdmin on the state bucket to active identity
+PRINCIPALS=$(gcloud projects get-iam-policy "${PROJECT_ID}" --filter="bindings.role:roles/owner" --flatten="bindings[].members" --format="value(bindings.members)")
+for principal in ${PRINCIPALS}; do
+  gcloud storage buckets add-iam-policy-binding "gs://${BUCKET_NAME}" --member="${principal}" --role="roles/storage.objectAdmin" &> /dev/null || true
+done
 ```
 
 ### 5. Generate kOps Cluster Configuration
@@ -130,9 +144,12 @@ kops update cluster --name="${CLUSTER_NAME}" --yes
 ```
 
 ### 8. Export Kubeconfig
-Retrieve admin credentials and write them to your default kubeconfig path:
+Retrieve admin credentials and write them to your default kubeconfig path. We also explicitly export it to `bin/KUBECONFIG` and set the `KUBECONFIG` environment variable so verification and E2E test suites can find it easily:
 ```sh
+mkdir -p bin
+kops export kubeconfig --name="${CLUSTER_NAME}" --admin --kubeconfig="bin/KUBECONFIG"
 kops export kubeconfig --name="${CLUSTER_NAME}" --admin
+export KUBECONFIG="$(pwd)/bin/KUBECONFIG"
 ```
 
 ### 9. Validate Cluster Liveness
