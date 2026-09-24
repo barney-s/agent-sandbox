@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 source "${SCRIPT_DIR}/params.env"
 export KOPS_STATE_STORE
+export PATH="${HOME}/go/bin:${PATH}"
 
 cd "${REPO_ROOT}"
 
