@@ -25,3 +25,11 @@ The controller manager has the flag `--enable-warm-pool-eviction=true` (enabled 
 ## 5. Token Review Authorization Orchestration
 The router uses the Kubernetes `TokenReview` API (`sandbox-router/authz/tokenreview.go`) to validate Bearer tokens.
 - **The Question:** Where and how do the SDK clients (Go/Python) retrieve the Bearer tokens they present in the `Authorization` header? Does the platform orchestrator expect users to pass their own personal service account tokens, or are there short-lived scoped tokens generated dynamically on the client side?
+
+## 6. GCP Default Compute Service Account Privilege Escalation Risks
+Deploying kOps clusters using `--gce-service-account=default` binds the default Compute Engine service account to all node and control plane instances.
+- **The Question:** Since the default GCE service account typically holds wide Project Editor permissions, any workload inside the cluster with access to the GCE metadata server (`169.254.169.254`) can acquire high-privilege access tokens. Although `agent-sandbox` enforces strict default egress blocking via NetworkPolicies to the metadata IP, what happens if standard CNI configuration misses these rules or if a compromised control-plane container escapes to the host? How can we enforce the use of custom, least-privileged IAM service accounts for nodes in standard production deployment runbooks?
+
+## 7. Gossip-Based DNS Performance under High Churn
+kOps clusters ending with `.k8s.local` use gossip-based DNS resolution instead of a public or private DNS zone.
+- **The Question:** Under severe benchmark load (e.g., launching and deleting hundreds of sandboxes per second), does the etcd/apiserver lookup or node-to-node routing latency degrade due to UDP packet loss or gossip protocol propagation delays? How does gossip-based DNS compare in reliability to Google Cloud DNS under sustained high-throughput sandbox adoption churn?
