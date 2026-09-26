@@ -33,3 +33,9 @@ Deploying kOps clusters using `--gce-service-account=default` binds the default 
 ## 7. Gossip-Based DNS Performance under High Churn
 kOps clusters ending with `.k8s.local` use gossip-based DNS resolution instead of a public or private DNS zone.
 - **The Question:** Under severe benchmark load (e.g., launching and deleting hundreds of sandboxes per second), does the etcd/apiserver lookup or node-to-node routing latency degrade due to UDP packet loss or gossip protocol propagation delays? How does gossip-based DNS compare in reliability to Google Cloud DNS under sustained high-throughput sandbox adoption churn?
+
+## 8. High-Scale Metric Gathering and Prometheus OOM Risks
+In large-scale Capacity Cliff tests (50k+ sandboxes), the ClusterLoader2 Prometheus server gathers highly detailed cluster-level telemetry:
+- **The Question:** Since ClusterLoader2 hardcodes the Prometheus memory limit to a minimal formula (`2Gi x (1 + nodes/1000)`), how can we prevent Prometheus from OOMing under massive metric cardinality without manual, environment-specific tuning of the multiplier? Is there a way to filter out high-frequency node scraping (like cadvisor and kubelet) natively within the test configurations?
+- **Code Ambiguity:** The metrics scraping configurations reside in the performance suite (`dev/load-test/test-recipes/monitor/`), but do not provide dynamic, scale-aware cardinality reduction filters.
+
